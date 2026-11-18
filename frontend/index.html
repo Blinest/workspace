@@ -827,6 +827,29 @@ html, body { margin: 0; padding: 0; }
       font-size:10px; line-height:1; padding:0 2px; opacity:.3; flex:none; transition:opacity .12s; }
     #pane-route .lg-subrow:hover .lg-stepManualBtn{ opacity:1; }
     #pane-route .lg-stepManualBtn:hover{ color:#2f7a4f; }
+    /* 步骤进度百分比徽标：0 时几乎不显示，有进度时按档位上色 */
+    #pane-route .lg-stepPct{ flex:none; border:1px solid transparent; border-radius:4px; cursor:pointer;
+      font:600 9.5px/1.5 inherit; font-family:inherit; padding:0 4px; min-width:22px; text-align:center;
+      transition:opacity .12s, background .12s; }
+    #pane-route .lg-stepPct.none{ color:#a8a397; background:transparent; opacity:.28; font-weight:400; }
+    #pane-route .lg-subrow:hover .lg-stepPct.none{ opacity:.9; }
+    #pane-route .lg-stepPct.low{ color:#8a6d2f; background:#fff3d8; border-color:#ecd9a4; }
+    #pane-route .lg-stepPct.mid{ color:#1B365D; background:#eaf0f8; border-color:#c3d2e6; }
+    #pane-route .lg-stepPct.high{ color:#2f7a4f; background:#eaf5ee; border-color:#bfdccb; }
+    #pane-route .lg-stepPct.full{ color:#2f7a4f; background:#dff0e7; border-color:#a8d0b8; }
+    /* 进度调节条（点百分比后在本行下方展开） */
+    #pane-route .lg-stepPctBox{ display:flex; align-items:center; gap:6px; margin:2px 0 4px 22px;
+      padding:3px 8px; background:#fffdf5; border:1px dashed #e5d9b8; border-radius:6px; }
+    #pane-route .lg-stepPctLbl{ flex:none; font-size:10px; color:#7a6f5c; }
+    #pane-route .lg-stepPctRange{ flex:1 1 auto; min-width:0; height:3px; accent-color:#d9822b; cursor:pointer; }
+    #pane-route .lg-stepPctVal{ flex:none; min-width:32px; text-align:right; font:600 10.5px/1.5 inherit;
+      color:#8a5a1f; font-variant-numeric:tabular-nums; }
+    #pane-route .lg-stepPctOk{ flex:none; padding:1px 9px; border:1px solid #d9a015; background:#fbeec4;
+      border-radius:5px; font:600 10.5px/1.6 inherit; color:#7a5a10; cursor:pointer; }
+    #pane-route .lg-stepPctOk:hover{ background:#f6e3a8; }
+    #pane-route .lg-stepPctCancel{ flex:none; border:0; background:transparent; color:#b0a894;
+      cursor:pointer; font-size:12px; line-height:1; padding:0 2px; }
+    #pane-route .lg-stepPctCancel:hover{ color:#c0392b; }
     /* 手填面板 */
     #pane-route .lg-manualPomo{ background:#f6faf4; border-color:#cfe0c2; }
     /* 手填面板：分钟在左、保存靠右，和预备面板同一套对齐 */
@@ -1457,6 +1480,7 @@ window.DSW_CONFIG={siyuanBase:"http://127.0.0.1:6806",siyuanToken:"",aiBase:"htt
 (function(){"use strict";const h=t=>document.getElementById(t),te="dsh.worktable.learninggraph.v1",Z=window.DSW_CONFIG||{},Ke=Z.subPages||{},ee=String(Z.fileApi||""),SNAPSHOT_STEPS={},pt={base:Z.siyuanBase||"http://127.0.0.1:6806",token:Z.siyuanToken||"",aiBase:Z.aiBase||"https://api.moonshot.cn/v1/chat/completions",aiModel:Z.aiModel||"moonshot-v1-8k",aiKey:Z.aiKey||""},wt={source:"",generatedAt:"",summary:"",phases:[]},b={settings:Object.assign({},pt),loaded:!1,loading:!1,notebooks:{},docs:[],tags:{},docTags:{},heads:[],concepts:[],nodes:[],edges:[],layout:{nodes:[],edges:[],raf:null}};function Xe(){try{const t=JSON.parse(localStorage.getItem(te));t&&typeof t=="object"&&(b.settings=Object.assign({},pt,t))}catch{}h("apiBase").value=b.settings.base,h("apiToken").value=b.settings.token,h("aiBase").value=b.settings.aiBase,h("aiModel").value=b.settings.aiModel,h("aiKey").value=b.settings.aiKey,se()}function ne(){b.settings.base=h("apiBase").value.trim()||pt.base,b.settings.token=h("apiToken").value.trim(),b.settings.aiBase=h("aiBase").value.trim()||pt.aiBase,b.settings.aiModel=h("aiModel").value.trim()||pt.aiModel,b.settings.aiKey=h("aiKey").value.trim();try{localStorage.setItem(te,JSON.stringify(b.settings))}catch{}se()}function se(){const t=h("setupBar");t&&(t.style.display=b.settings.token?"none":"flex")}function ae(){document.querySelectorAll("#tabs .dshell-tab").forEach(e=>e.classList.toggle("dshell-tabOn",e.dataset.pane==="settings")),document.querySelectorAll(".lg-pane").forEach(e=>e.classList.toggle("lg-on",e.id==="pane-settings"));const t=h("apiToken");if(t){t.focus();try{t.select()}catch{}}}function Ge(){return b.settings.base.replace(/\/+$/,"")}async function _(t,e){if(!b.settings.token)throw new Error("还没填思源 API 令牌");const n=await fetch(Ge()+t,{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Token "+b.settings.token},body:JSON.stringify(e)});if(!n.ok)throw new Error("HTTP "+n.status);const s=await n.json();if(s&&s.code!==0)throw new Error(s.msg||"思源返回错误");return s&&s.data}async function ht(t){const e=[];let n=0,s=200;for(;;){const a=await _("/api/query/sql",{stmt:t+" LIMIT "+s+" OFFSET "+n});if(!a||!a.length||(e.push(...a),a.length<s))break;n+=s}return e}async function Ve(){const t=await _("/api/query/sql",{stmt:"SELECT id FROM blocks WHERE type='d' LIMIT 1"});return Array.isArray(t)}async function Je(){b.notebooks={};try{const s=await _("/api/notebook/lsNotebooks",{});(s&&s.notebooks||[]).forEach(a=>{a&&a.id&&(b.notebooks[a.id]=(a.name||"").trim()||"未命名笔记本")})}catch{}const t=await ht("SELECT id, box, content, hpath, updated FROM blocks WHERE type='d' AND box!=''");b.docs=t.map(s=>({id:s.id,title:(s.content||"").trim()||(s.hpath||"").split("/").filter(Boolean).pop()||"未命名文档",notebook:s.box||"",updated:Number(s.updated)||0}));const e=await ht("SELECT root_id, content, updated FROM blocks WHERE type='t' AND box!=''");b.tags={},b.docTags={},e.forEach(s=>{if(!s.root_id)return;const a=(s.content||"").replace(/^#+/,"").trim();a&&(b.tags[a]||(b.tags[a]=new Set),b.tags[a].add(s.root_id),b.docTags[s.root_id]||(b.docTags[s.root_id]=new Set),b.docTags[s.root_id].add(a))});const n=await ht("SELECT root_id, content, updated FROM blocks WHERE type='h' AND box!=''");b.heads=n.map(s=>({text:(s.content||"").replace(/^#+\s*/,"").trim(),docId:s.root_id,updated:Number(s.updated)||0})).filter(s=>s.text&&s.docId&&s.text.length<=14),b.headsByDoc={},b.heads.forEach(s=>{(b.headsByDoc[s.docId]=b.headsByDoc[s.docId]||[]).push(s.text)}),b.loaded=!0;try{const s=await ht("SELECT sum(length(content)) AS c FROM blocks");b.totalWords=s&&s[0]&&Number(s[0].c)||0}catch{b.totalWords=0}}function Ye(){const t={};Object.keys(b.tags).forEach(n=>{t[n]={name:n,docs:new Set(b.tags[n]),kind:"tag"}}),b.heads.forEach(n=>{t[n.text]||(t[n.text]={name:n.text,docs:new Set,kind:"heading"}),t[n.text].docs.add(n.docId)});const e=Object.values(t).map(n=>{let s=0;return n.docs.forEach(a=>{const o=b.docs.find(r=>r.id===a);o&&o.updated>s&&(s=o.updated)}),n.cov=n.docs.size,n.recency=s,n});e.sort((n,s)=>s.cov-n.cov||s.recency-n.recency),b.concepts=e.filter(n=>n.cov>0)}function hs(){h("statsGrid").innerHTML=[kt("文档",b.docs.length),kt("主题",b.concepts.length),kt("标签",Object.keys(b.tags).length),kt("笔记本",Object.keys(b.notebooks).length)].join("")}function kt(t,e){return`<div class="dshell-stat"><div class="dshell-statLabel">${t}</div><div class="dshell-statValue">${e}</div></div>`}function fs(){const t=b.concepts.slice(0,40),e=Math.max(1,...t.map(n=>n.cov));h("topicList").innerHTML=t.map(n=>{const s=Math.round(n.cov/e*100),a=n.cov>=3?"lg-hot":"";return`<div class="lg-topicRow"><span class="lg-topicName" title="${k(n.name)}">${k(n.name)}</span><span class="lg-bar"><i class="${a}" style="width:${s}%"></i></span><span class="lg-count">${n.cov} 篇</span></div>`}).join("")||'<div class="lg-hint">暂无主题</div>'}function ms(){const t={};b.docs.forEach(s=>{const a=b.notebooks[s.notebook]||"未分类";t[a]=(t[a]||0)+1});const e=Object.entries(t).sort((s,a)=>a[1]-s[1]),n=Math.max(1,...e.map(s=>s[1]));h("domainList").innerHTML=e.map(([s,a])=>`<div class="lg-topicRow"><span class="lg-topicName" title="${k(s)}">${k(s)}</span><span class="lg-bar"><i style="width:${Math.round(a/n*100)}%"></i></span><span class="lg-count">${a} 篇</span></div>`).join("")||'<div class="lg-hint">暂无数据</div>'}const oe="dsh.worktable.learninggraph.matrix.v1",re=[{q:"iu",name:"重要 · 紧急",short:"重要紧急",hint:"立即做",color:"#e05252",tint:"rgba(224,82,82,.11)"},{q:"in",name:"重要 · 不紧急",short:"重要不紧急",hint:"排期做",color:"#d9a015",tint:"rgba(217,160,21,.10)"},{q:"uu",name:"紧急 · 不重要",short:"紧急不重要",hint:"少做/委派",color:"#e8863a",tint:"rgba(232,134,58,.11)"},{q:"un",name:"不重要 · 不紧急",short:"不重要不紧急",hint:"延后/删",color:"#4caf6e",tint:"rgba(76,175,110,.10)"}];let D=[];const Qe={"RTOS 原理（任务/调度/同步）":"in","中断 / 时钟 / DMA 全链路":"iu","C 内存模型与链接脚本":"in","UART / I2C / SPI / CAN 对比":"in","CAN 总线设计深入":"un","步进/直流电机闭环控制":"iu","执行链整合：驱动→电机→张力反馈→上位机":"iu","高频必刷：链表 / 二叉树 / 排序 / 滑动窗口 / 双指针 / KMP":"iu","进阶：动态规划 / DFS / BFS / 贪心":"in","Solidworks → URDF → SOFA 仿真链路":"in",强化学习控制连续体机器人:"un"};let tt={};function Ze(){try{const t=JSON.parse(localStorage.getItem(oe));return t&&typeof t=="object"?t:{}}catch{return{}}}function Dt(){try{localStorage.setItem(oe,JSON.stringify(tt))}catch{}}let St=null;function tn(t){const e=(t.name||"").replace(/[（(][^)]*[)）]/g," ");let n=e;const s=e.indexOf("：");s>=0&&(n=e.slice(s+1));const a=n.split(/[/、，,;；→]+/).map(o=>o.trim()).filter(o=>o.length>=2);return(a.length>=2?a:[]).map(o=>({text:o,done:!1}))}function en(t){if(SNAPSHOT_STEPS&&SNAPSHOT_STEPS[t.name])return SNAPSHOT_STEPS[t.name].map(e=>({text:e,done:!1}));if(t&&Array.isArray(t.steps)){const e=t.steps.map(n=>({text:String(n||"").trim(),done:!1})).filter(n=>n.text);if(e.length)return e}return tn(t)}function nn(t,e){const n=String(t||"")+" "+String(e||"");return/面试|高频|必刷|手撕|截止|联调|交付|紧急|上线|发布|deadline|今日|今天/i.test(n)?"iu":/阶段\s*5|领域拓展|强化学习|探索|可选|兴趣|长期|日后|趣味/i.test(n)?"un":"in"}function ie(t){const e=t.subs.length,n=t.subs.filter(r=>r.done).length,s=e?Math.round(n/e*100):0,a=e>0&&n===e,o=t.subs.map((r,c)=>`<div class="lg-subrow${r.done?" lg-sub-done":""}">
         <label class="lg-chk"><input type="checkbox" data-act="sub" data-idx="${c}"${r.done?" checked":""}><span></span></label>
         <span class="lg-subText">${k(r.text)}</span>
+        ${(()=>{const p=r.done?100:(Number(r.pct)||0);const cl=p>=100?"full":(p>=60?"high":(p>=30?"mid":"low"));return p>0&&!r.done?`<button class="lg-stepPct ${cl}" data-act="steppct" data-idx="${c}" title="这一步已完成 ${p}%，点一下调整">${p}%</button>`:`<button class="lg-stepPct none" data-act="steppct" data-idx="${c}" title="标记这一步做了多少（用于部分计分）">%</button>`;})()}
         <button class="lg-stepPomoBtn" data-act="steppomo" data-idx="${c}" title="开始计时（也可以点右边 ➕ 直接补一条记录）">🍅</button>
         <button class="lg-stepManualBtn" data-act="stepmanual" data-idx="${c}" title="直接补一条记录（不用计时）">➕</button>
         <button class="lg-subDel" data-act="delsub" data-idx="${c}" title="删除分点">×</button>
@@ -2044,6 +2068,139 @@ function openManualPomo(r, si, rowEl){
   });
   /* 点面板内部不要让外层把步骤勾上/取消 */
   box.addEventListener('click', function(ev){ ev.stopPropagation(); });
+}
+
+/* ===== 步骤进度（百分比）=====
+   和侧边栏的 stepPct 是同一套数据：写 pct 与 pctHist。
+   pctHist 记录「哪天推进到多少」，逐日增量计分就靠它。 */
+function openStepPct(r, si, rowEl, btnEl){
+  if (!rowEl) return;
+  /* 已经有面板就关掉（再点一次 = 取消）。
+     ⚠ 只看紧跟在「这一行」后面的那个，别全局找 —— 否则会关掉别的行的面板。 */
+  var old = rowEl.nextElementSibling;
+  if (old && old.classList && old.classList.contains('lg-stepPctBox')) { old.remove(); return; }
+  /* 先关掉其它行上开着的面板，保证一次只开一个 */
+  Array.prototype.forEach.call(document.querySelectorAll('.lg-stepPctBox'), function(b2){ b2.remove(); });
+  var _sub = (r.subs || [])[si];
+  if (!_sub) return;
+
+  var cur = _sub.done ? 100 : (Number(_sub.pct) || 0);
+  var box = document.createElement('div');
+  box.className = 'lg-stepPctBox';
+  /* 面板上记住自己属于哪一行：提交时靠它找回正确的步骤，
+     不依赖全局 querySelector（多个任务里 data-idx 会重复）。 */
+  box.setAttribute('data-pct-si', String(si));
+  box.innerHTML = '<span class="lg-stepPctLbl">已完成</span>'
+    + '<input class="lg-stepPctRange" type="range" min="0" max="100" step="5" value="' + cur + '">'
+    + '<span class="lg-stepPctVal">' + cur + '%</span>'
+    + '<button class="lg-stepPctOk" data-act="steppct-ok" data-idx="' + si + '">定</button>'
+    + '<button class="lg-stepPctCancel" data-act="steppct-cancel">✕</button>';
+  if (rowEl.parentNode) rowEl.parentNode.insertBefore(box, rowEl.nextSibling);
+  else rowEl.appendChild(box);
+
+  var rng = box.querySelector('.lg-stepPctRange');
+  var val = box.querySelector('.lg-stepPctVal');
+  rng.addEventListener('input', function(){ val.textContent = rng.value + '%'; });
+  /* ⚠ 面板内部的点击不要冒泡到外层（否则会顺带把这一步勾上/取消）。
+     但「定」「✕」这两个按钮必须放行 —— 它们靠外层 [data-act] 委托处理，
+     在这里 stopPropagation 会把它们彻底掐死（表现为点了没反应）。
+     所以：只拦「不是按钮」的点击。 */
+  box.addEventListener('click', function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
+    if (!btn) ev.stopPropagation();
+  });
+  box.addEventListener('keydown', function(ev){
+    if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); commitStepPct(r, si, +rng.value || 0, box); }
+    if (ev.key === 'Escape') { ev.stopPropagation(); box.remove(); }
+  });
+  try { rng.focus(); } catch(e){}
+}
+
+function commitStepPct(r, si, pct, panelEl){
+  var _sub = (r.subs || [])[si];
+  if (!_sub) return;
+  var p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+  var _tn = new Date();
+  var _pp = function(x){ return (x < 10 ? "0" : "") + x; };
+  var today = _tn.getFullYear() + '-' + _pp(_tn.getMonth() + 1) + '-' + _pp(_tn.getDate());
+
+  /* 100% 视为勾选完成；<100 取消勾选 */
+  _sub.pct = p;
+  if (p >= 100) {
+    _sub.done = true;
+    _sub.doneAt = today;
+  } else {
+    _sub.done = false;
+    _sub.doneAt = null;
+  }
+  if (!Array.isArray(_sub.dates)) _sub.dates = [];
+  if (_sub.dates.indexOf(today) < 0) _sub.dates.push(today);
+  _sub.date = _sub.date || today;
+
+  /* 推进历史：同一天多次调整保留较大值；同时钉住这一步的分值，
+     以后任务工时被改，历史记账也不会追改。 */
+  if (!Array.isArray(_sub.pctHist)) _sub.pctHist = [];
+  var nSubs = Math.max(1, (r.subs || []).length);
+  var tMins = Number(r.mins) > 0 ? Number(r.mins) : nSubs * 15;
+  var perStep = Math.round((tMins / nSubs) * 100) / 100;
+  var hit = null;
+  for (var h = _sub.pctHist.length - 1; h >= 0; h--) {
+    if (_sub.pctHist[h] && String(_sub.pctHist[h].date).slice(0, 10) === today) { hit = _sub.pctHist[h]; break; }
+  }
+  if (hit) {
+    if (p >= (Number(hit.pct) || 0)) { hit.pct = p; hit.pts = perStep; }
+  } else {
+    _sub.pctHist.push({ date: today, pct: p, pts: perStep });
+  }
+  if (_sub.pctHist.length > 40) _sub.pctHist = _sub.pctHist.slice(-40);
+
+  /* 写回共享快照，侧边栏立刻能看到。
+     ⚠ 按「任务名 + 步骤文字」定位，不要用下标 si ——
+     下标是渲染时的序号，和快照里的顺序不一定一致（任务被重排/增删过），
+     用下标会写到别的步骤上，或者因为越界而整段静默跳过。 */
+  try {
+    var KEY = "dsh.worktable.todos.v1";
+    var sn = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (sn && Array.isArray(sn.items)) {
+      var rec = sn.items.filter(function(x){ return x.name === r.name; })[0];
+      if (rec) {
+        if (!Array.isArray(rec.subs)) rec.subs = [];
+        var target = null;
+        var wantText = String(_sub.text || "").trim();
+        for (var q = 0; q < rec.subs.length; q++) {
+          if (String((rec.subs[q] && rec.subs[q].text) || "").trim() === wantText) { target = rec.subs[q]; break; }
+        }
+        /* 文字没匹配上就退回下标（至少不会完全不写） */
+        if (!target) target = rec.subs[si];
+        if (target) {
+          target.pct = _sub.pct;
+          target.done = _sub.done;
+          target.doneAt = _sub.doneAt;
+          target.dates = _sub.dates.slice();
+          target.date = _sub.date;
+          target.pctHist = _sub.pctHist.slice();
+          sn.at = Date.now();
+          sn.forcePush = Date.now();
+          sn.dirty = 0;
+          localStorage.setItem(KEY, JSON.stringify(sn));
+        }
+      }
+    }
+  } catch(eSp){}
+
+  /* 关掉面板 + 刷新这一行的徽标。
+     只关传入的那个面板，不要用 querySelector 全局找 —— 可能同时开了多个。 */
+  try {
+    if (panelEl && panelEl.parentNode) panelEl.parentNode.removeChild(panelEl);
+    else {
+      var anyBox = document.querySelector('.lg-stepPctBox');
+      if (anyBox && anyBox.parentNode) anyBox.parentNode.removeChild(anyBox);
+    }
+  } catch(e){}
+  try { W(); } catch(eW){}
+  try { score(); } catch(eSc){}
+  var tag = document.getElementById('routeTag');
+  if (tag) tag.textContent = (p >= 100 ? '已标记完成' : '已记录进度 ' + p + '%') + '：' + _sub.text;
 }
 
 function scoreData(){
@@ -4583,6 +4740,7 @@ function W(){
       row.className = 'lg-subrow';
       row.innerHTML = '<label class="lg-chk"><input type="checkbox" data-act="sub" data-idx="' + idx + '">'
         + '<span></span></label><span class="lg-subText">' + k(n) + '</span>'
+        + '<button class="lg-stepPct none" data-act="steppct" data-idx="' + idx + '" title="标记这一步做了多少（用于部分计分）">%</button>'
         + '<button class="lg-stepPomoBtn" data-act="steppomo" data-idx="' + idx + '" title="开始计时（也可以点右边 ➕ 直接补一条记录）">🍅</button>'
         + '<button class="lg-stepManualBtn" data-act="stepmanual" data-idx="' + idx + '" title="直接补一条记录（不用计时）">➕</button>'
         + '<button class="lg-subDel" data-act="delsub" data-idx="' + idx + '" title="删除分点">×</button>';
@@ -4707,6 +4865,28 @@ function W(){
     /* 勾选走的是局部更新，不需要再走末尾的 W() */
     return;
   }
+}else if(c==="steppct"){
+  /* 标记这一步做了多少（部分完成）。
+     点一下在这一行下方展开一条滑块，定下来就写回 pct / pctHist。
+     和侧边栏共用同一份快照字段，两边看到的是同一个值。 */
+  var si5 = +o.dataset.idx;
+  if(!r.subs[si5]) return;
+  openStepPct(r, si5, o.closest('.lg-subrow'), o);
+  return;
+}else if(c==="steppct-ok"){
+  /* 「定」：从**这个按钮所在的面板**读滑块值。
+     ⚠ 不能用 document.querySelector('.lg-stepPctBox') ——
+     多个任务里 data-idx 会重复，全局查会读错/关错面板。 */
+  var boxOk = o.closest('.lg-stepPctBox');
+  var siOk = boxOk ? (+boxOk.getAttribute('data-pct-si')) : (+o.dataset.idx);
+  var rng = boxOk && boxOk.querySelector('.lg-stepPctRange');
+  var val = rng ? (+rng.value || 0) : 0;
+  commitStepPct(r, siOk, val, boxOk);
+  return;
+}else if(c==="steppct-cancel"){
+  var boxC = o.closest('.lg-stepPctBox');
+  if(boxC && boxC.parentNode) boxC.parentNode.removeChild(boxC);
+  return;
 }else if(c==="steppomo"){
   /* 给这一步开一个番茄：点一下就开始倒计时，
      同时把这一步的文字变成可编辑输入框，可以边计时边写「做了什么」。
