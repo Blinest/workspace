@@ -118,11 +118,22 @@ services/
 ## 发布
 
 ```bash
+npm run check-version    # 先确认 6 处版本号一致
 npx tauri build
 # 产物：src-tauri/target/release/bundle/nsis/*.exe
 ```
 
 安装包为 `currentUser` 模式，无需管理员权限。
+
+### 版本号规则
+
+| 改动量级 | 变化 | 谁来定 |
+|---|---|---|
+| 小改动（修 bug、加小功能） | 补丁位 +1：`0.0.2 → 0.0.3` | 每次改完自动升 |
+| 中等更新 | 次版本位 +1：`0.0.x → 0.1.0` | 由用户提示 |
+| 大版本 | 主版本位 +1：`0.x.x → 1.0.0` | 由用户提示 |
+
+版本号散落在 6 个位置，改完务必跑 `npm run check-version`。详见 [VERSION.md](VERSION.md)。
 
 ### 外部服务依赖
 
