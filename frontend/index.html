@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.0.3 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.0.4 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1467,7 +1467,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.3</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.4</span>
   </div>
 </div>
 
@@ -2546,12 +2546,37 @@ function persistTodos(){
     var body = JSON.stringify(payload);
     var prev = null;
     try { prev = JSON.parse(localStorage.getItem("dsh.worktable.todos.v1") || "null"); } catch(e){}
-    /* 内容没变就不写，避免与侧边栏来回触发 storage 事件 */
-    if (prev && JSON.stringify({summary:prev.summary,tag:prev.tag,items:prev.items}) === body) return;
+    /* 内容没变就不写，避免与侧边栏来回触发 storage 事件。
+       ⚠ 比较必须**与字段顺序无关**：payload 是重新构造的对象，
+       字段顺序和快照里那份不一定一致，直接 JSON.stringify 比字符串
+       会永远不相等 → 每次都写 → 每写一次又触发一次渲染，
+       就是「今日待办一直在跳」。这里按关键字段逐项比。 */
+    if (prev) {
+      try {
+        var _sig = function(items){
+          return (items || []).map(function(t){
+            return [t.name, t.mins, t.level,
+              (t.subs || []).map(function(s){
+                return [s.text, s.done ? 1 : 0, s.doneAt || "", s.pct || 0,
+                        JSON.stringify(s.dates || null), JSON.stringify(s.pctHist || null)].join("~");
+              }).join("|")
+            ].join("^");
+          }).join("\n");
+        };
+        if (_sig(prev.items) === _sig(payload.items)) return;
+      } catch(eSig){}
+    }
     payload.at = Date.now();
     payload.dirty = 0;
     payload.forcePush = Date.now();     /* 主界面改了 → 让侧边栏立刻推云端 */
-    localStorage.setItem("dsh.worktable.todos.v1", JSON.stringify(payload));
+    var _json = JSON.stringify(payload);
+    /* ⚠ 记下「刚写进去的这份内容」。
+       persistTodos 是被 W() 调起来的，W() 又会监听 storage 事件 ——
+       自己写的快照会触发自己的监听，再 W() 再写，就是无限循环
+       （表现：今日待办一直在跳）。写之前盖个戳，监听里比对内容，
+       内容和自己刚写的一样就直接忽略。 */
+    try { window.__selfWrite = _json; window.__selfWriteAt = Date.now(); } catch(eSW){}
+    localStorage.setItem("dsh.worktable.todos.v1", _json);
   }catch(e){}
 }
 /* 侧边栏里勾选后会把快照写回 localStorage，这里接收并合并回内存 */
@@ -2629,6 +2654,14 @@ window.addEventListener("storage", function(ev){
 });window.addEventListener("storage", function(ev){
     if (ev.key !== "dsh.worktable.todos.v1" || !ev.newValue) return;
     if (syncFreeze && Date.now() < syncFreeze) return;
+    /* 自己刚写进去的那份 —— 直接忽略，否则 persistTodos → W → storage → W 无限循环 */
+    try {
+      if (window.__selfWrite && ev.newValue === window.__selfWrite
+          && (Date.now() - (window.__selfWriteAt || 0)) < 3000) {
+        window.__selfWrite = null;
+        return;
+      }
+    } catch(eSelf){}
     try{
       const snap = JSON.parse(ev.newValue);
       if (!snap || !Array.isArray(snap.items)) return;
@@ -2694,13 +2727,23 @@ window.addEventListener("storage", function(ev){
           (d.subs || []).forEach(function(s){
             const ns = byText[String((s && s.text) || "").trim()];
             if (!ns) return;
+            /* ⚠ 每一项都必须是「真的不同」才 ++。
+               以前 dates 写成「快照里有就赋值 + 计数」——
+               快照里的 dates 永远非空，于是每一轮都判定「有变化」，
+               触发 W() → persistTodos 写快照 → storage 事件 → 又进来 → W()…
+               自己写、自己收、自己再写，形成死循环，
+               表现就是「今日待办一直在跳」。 */
             /* 进度：已勾选就是 100 */
             const wantPct = ns.done ? 100 : (Number(ns.pct) || 0);
             if ((Number(s.pct) || 0) !== wantPct) { s.pct = wantPct; touchedSubs++; }
             if (!!s.done !== !!ns.done) { s.done = !!ns.done; touchedSubs++; }
             if ((s.doneAt || null) !== (ns.doneAt || null)) { s.doneAt = ns.doneAt || null; touchedSubs++; }
             if (ns.date && s.date !== ns.date) { s.date = ns.date; touchedSubs++; }
-            if (Array.isArray(ns.dates) && ns.dates.length) { s.dates = ns.dates.slice(); touchedSubs++; }
+            if (Array.isArray(ns.dates) && ns.dates.length) {
+              const nd = JSON.stringify(ns.dates);
+              const sd = JSON.stringify(s.dates || null);
+              if (nd !== sd) { s.dates = ns.dates.slice(); touchedSubs++; }
+            }
             /* pctHist 也要同步：否则内存旧副本下次写回会把历史冲掉 */
             const nh = JSON.stringify(ns.pctHist || null);
             const sh = JSON.stringify(s.pctHist || null);
