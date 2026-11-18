@@ -1,0 +1,25 @@
+# 仅对「思源科研工作台_桌面版」这个项目生效的 cargo 配置（不动你全局的 ~/.cargo/config.toml）
+# 本机实测：crates.io 官方 162 KB/s（会抽风卡死），rsproxy 345 KB/s。
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[registries.rsproxy]
+index = "sparse+https://rsproxy.cn/index/"
+
+[net]
+retry = 10
+git-fetch-with-cli = true
+
+# Rust 默认会把你本机的构建路径写进二进制（panic 位置、file!() 等），
+# 等于免费告诉改包的人「作者的项目在哪个盘哪个目录」。重映射成相对路径。
+[build]
+rustflags = ['--remap-path-prefix=D:\5_database\5_2_privdata\dsdata=.']
+
+# 官方源的「30 秒没下够 10 字节就断开」太激进，本机网络抖动一下整次构建就白跑
+[http]
+timeout = 180
+low-speed-limit = 1
+multiplexing = false

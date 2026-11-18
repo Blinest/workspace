@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SiyuanResearchWorktable",
+  "version": "0.0.1",
+  "identifier": "com.dsw.siyuan-research-worktable",
+  "build": {
+    "frontendDist": "../frontend"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "工作台",
+        "width": 1100,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "maximized": false,
+        "resizable": true,
+        "visible": false,
+        "decorations": false,
+        "transparent": false,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../services/weekly-summary.html": "services/weekly-summary.html",
+      "../services/regen-config.example.json": "services/regen-config.example.json",
+      "../services/zhihu_bridge.py": "services/zhihu_bridge.py",
+      "../services/bin/zhihu-cli.exe": "services/bin/zhihu-cli.exe",
+      "../services/README.md": "services/README.md"
+    },
+    "shortDescription": "思源科研工作台",
+    "longDescription": "把思源笔记变成可查询、可统计、可导出的科研工作台：待办规划、番茄钟、每日执行力与周报。",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

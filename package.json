@@ -1,0 +1,14 @@
+{
+  "name": "siyuan-research-worktable",
+  "version": "0.0.1",
+  "private": true,
+  "description": "思源科研工作台 · 桌面版（Tauri 2 外壳，前端为静态文件）",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

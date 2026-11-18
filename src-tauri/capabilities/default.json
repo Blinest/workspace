@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "默认能力：主窗口 + 侧边栏；侧边栏需要自行隐藏/显示，拖动后要能定位/吸附",
+  "windows": ["main", "sidebar"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-start-dragging",
+    "core:window:allow-current-monitor",
+    "core:window:allow-available-monitors",
+    "core:window:allow-primary-monitor"
+  ]
+}

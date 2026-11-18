@@ -1,0 +1,13 @@
+# 服务端 Python 依赖
+#   pip install -r requirements.txt
+#   python -m playwright install chromium    # 剪藏服务需要浏览器内核
+
+# 抓取服务（3920）
+scrapling
+lxml
+markdownify
+playwright
+
+# 发票解析服务（3923）
+pymupdf
+rapidocr_onnxruntime

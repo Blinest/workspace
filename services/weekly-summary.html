@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>本周工作总结 · 2026.08.31 – 09.06</title>
+<meta name="generator" content="Kami">
+<style>
+  :root{
+    --parchment:#f5f4ed; --ivory:#faf9f5; --border:#e8e6dc; --border-soft:#e5e3d8;
+    --brand:#1B365D; --brand-tint:#EEF2F7; --tag-bg:#E4ECF5;
+    --near-black:#141413; --dark-warm:#3d3d3a; --charcoal:#4d4c48; --olive:#504e49;
+    --stone:#6b6a64; --breaking-fg:#8b4513; --breaking-bg:#f0e0d8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--parchment);color:var(--near-black);
+    font-family:"Source Han Serif SC","Noto Serif SC","Songti SC","STSong","SimSun",Georgia,"Times New Roman",serif;
+    font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased;}
+  .page{max-width:940px;margin:0 auto;padding:56px 48px 72px;}
+  .rule{height:1px;background:var(--border);margin:0 0 10px;}
+  .rule.thick{background:var(--brand);height:3px;width:100%;}
+
+  /* 报头 */
+  .mast{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:4px 0 6px;}
+  .kicker{font-size:12px;letter-spacing:.22em;color:var(--stone);text-transform:uppercase;margin:0;}
+  h1.title{font-size:34px;line-height:1.15;font-weight:600;margin:2px 0 0;color:var(--brand);letter-spacing:.01em;}
+  .period{font-size:14px;color:var(--olive);white-space:nowrap;}
+  .sub{color:var(--charcoal);max-width:64ch;margin:10px 0 26px;font-size:14.5px;}
+
+  /* 统计卡 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:0 0 30px;}
+  .stat{border:1px solid var(--border);background:var(--ivory);padding:16px 18px 14px;border-radius:2px;}
+  .stat .lbl{font-size:12px;color:var(--stone);letter-spacing:.05em;margin:0 0 4px;}
+  .stat .val{font-size:30px;line-height:1;font-weight:600;color:var(--brand);margin:0;font-family:Georgia,"Times New Roman",serif;}
+  .stat .val small{font-size:15px;color:var(--charcoal);font-weight:500;margin-left:3px;}
+  .stat .cap{font-size:12px;color:var(--olive);margin:6px 0 0;}
+
+  /* 章节 */
+  h2.sec{font-size:17px;color:var(--brand);font-weight:600;margin:0 0 4px;letter-spacing:.01em;display:flex;align-items:baseline;gap:10px;}
+  h2.sec .n{font-family:Georgia,serif;font-size:14px;color:var(--stone);}
+  .secrule{border:none;border-top:1px solid var(--border);margin:6px 0 20px;}
+
+  /* 图表 */
+  .chart-wrap{border:1px solid var(--border);background:var(--ivory);padding:20px 22px 14px;border-radius:2px;margin:0 0 30px;}
+  .chart-caption{font-size:12.5px;color:var(--olive);margin:6px 2px 0;max-width:70ch;}
+  .bars{display:flex;align-items:flex-end;gap:0;height:190px;padding-top:6px;}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar{width:52%;max-width:64px;background:var(--brand);border-radius:1px 1px 0 0;position:relative;min-height:2px;}
+  .bar.zero{background:var(--border-soft);height:3px !important;}
+  .bar .v{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--charcoal);font-family:Georgia,serif;}
+  .bar-lbl{margin-top:10px;font-size:12px;color:var(--olive);}
+
+  .split{display:grid;grid-template-columns:1fr 1.2fr;gap:14px;}
+  .capRow{ display:flex; align-items:center; gap:10px; font-size:12px; padding:3px 0; }
+  .capDate{ width:46px; color:#7a746a; }
+  .capBar{ flex:1 1 auto; height:7px; background:#ece5d4; border-radius:4px; overflow:hidden; }
+  .capBar i{ display:block; height:100%; }
+  .capBar i.g{ background:#4caf6e; } .capBar i.m{ background:#d9a015; } .capBar i.b{ background:#e05252; }
+  .capNum{ width:42px; text-align:right; color:#7a746a; }
+  .capMin{ width:54px; text-align:right; color:#a39c8e; }
+  .capHead{ font-size:12px; color:#7a746a; margin-bottom:6px; }
+  .panel{border:1px solid var(--border);background:var(--ivory);padding:18px 20px;border-radius:2px;}
+  .panel h3{font-size:14px;margin:0 0 12px;color:var(--brand);font-weight:600;}
+
+  /* 项目 / 任务卡片 */
+  .project{margin:0 0 18px;}
+  .proj-head{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin:0 0 8px;}
+  .proj-head .nm{font-size:16px;font-weight:600;color:var(--near-black);}
+  .proj-head .total{font-size:13px;color:var(--stone);font-family:Georgia,serif;}
+  .task{border:1px solid var(--border-soft);border-left:3px solid var(--brand);background:var(--ivory);
+    padding:10px 14px;margin:0 0 8px;border-radius:1px;}
+  .task .t{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .task .t .name{font-weight:600;font-size:14.5px;}
+  .badge{display:inline-block;font-size:11px;letter-spacing:.04em;padding:1px 8px;border-radius:20px;border:1px solid var(--border);color:var(--charcoal);background:var(--parchment);}
+  .badge.hot{color:var(--breaking-fg);border-color:#e0c0ae;background:var(--breaking-bg);}
+  .badge.plan{color:var(--brand);border-color:#b9c6da;background:var(--tag-bg);}
+  .task .schedule{font-size:12px;color:var(--stone);margin:3px 0 6px;font-family:Georgia,serif;}
+  .task ul{margin:4px 0 0;padding-left:0;list-style:none;}
+  .task li{font-size:13.5px;color:var(--charcoal);display:flex;gap:8px;padding:3px 0;border-bottom:1px dotted var(--border-soft);}
+  .task li:last-child{border-bottom:none;}
+  .task li::before{content:"";flex:none;width:5px;height:5px;border-radius:50%;background:var(--brand);margin-top:8px;}
+  .pomo{flex:none;font-family:Georgia,serif;font-size:11.5px;color:var(--brand);background:var(--brand-tint);padding:0 6px;border-radius:8px;align-self:center;}
+  .day{flex:none;font-size:11px;color:var(--stone);width:44px;font-family:Georgia,serif;}
+
+  /* 数据点 / 说明 */
+  .footnote{border-top:1px solid var(--border);margin-top:34px;padding-top:14px;font-size:12px;color:var(--stone);}
+  .kv{font-size:12px;color:var(--olive);}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .tags span{font-size:12px;color:var(--charcoal);border:1px solid var(--border);background:var(--parchment);padding:2px 9px;border-radius:20px;}
+
+  /* Kami 再生栏（与整页纸感一致） */
+  .regenbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;
+    margin-top:40px;padding-top:16px;border-top:1px solid var(--border);}
+  .regenbar .regen-meta{display:flex;flex-direction:column;gap:3px;}
+  .regen-k{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--stone);margin:0;}
+  .regen-ts{font-size:12.5px;color:var(--olive);margin:0;}
+  .regen-ts b{font-weight:600;color:var(--brand);font-family:Georgia,"Times New Roman",serif;}
+  .regen-status{flex-basis:100%;text-align:right;font-size:12px;color:var(--stone);min-height:1.2em;margin:4px 0 0;}
+  .regen-btn{font-family:inherit;font-size:12.5px;letter-spacing:.05em;color:var(--brand);
+    background:var(--ivory);border:1px solid var(--border);border-radius:20px;padding:7px 18px;cursor:pointer;
+    transition:background .15s,border-color .15s;}
+  .regen-btn:hover{background:var(--brand-tint);border-color:#b9c6da;}
+  .regen-btn:active{transform:translateY(1px);}
+  .regen-btn:disabled{opacity:.5;cursor:default;}
+
+  @media (max-width:640px){
+    .page{padding:36px 20px 48px;}
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .split{grid-template-columns:1fr;}
+    h1.title{font-size:27px;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="rule thick"></div>
+  <p class="kicker">Weekly Work Summary</p>
+  <div class="mast">
+    <h1 class="title">本周工作总结</h1>
+    <span class="period"><!--{{PERIOD}}-->
+    2026.11.16 – 11.22
+  <!--{{/PERIOD}}--></span>
+  </div>
+  <div class="rule"></div>
+  <p class="sub"><!--{{HEADLINE}}-->选型库维护收尾，BOM补项与TDCR通信复测为下周重点<!--{{/HEADLINE}}--></p>
+
+  <!-- 统计 -->
+  <div class="stats"><!--{{STATS}}-->
+    <div class="stat"><p class="lbl">专注番茄</p><p class="val">8<small>个</small></p><p class="cap">本周记录的工作时段</p></div>
+    <div class="stat"><p class="lbl">专注时长</p><p class="val">379<small>min</small></p><p class="cap">≈ 6 小时有效投入</p></div>
+    <div class="stat"><p class="lbl">推进任务</p><p class="val">4<small>项</small></p><p class="cap">本周投入执行的任务项</p></div>
+    <div class="stat"><p class="lbl">工作项目</p><p class="val">1<small>个</small></p><p class="cap">硕士论文大纲（腱驱动变刚度连续体机器人）</p></div>
+  <!--{{/STATS}}--></div>
+
+  <!-- 专注分布：按日 -->
+  <div class="chart-wrap">
+    <h2 class="sec"><span class="n">①</span> 专注投入 · 按日分布</h2>
+    <hr class="secrule">
+    <!--{{BARS}}-->
+    <div class="bars"><div class="bar-col"><div class="bar" style="height:73%"><span class="v">160</span></div><div class="bar-lbl">11-16</div></div><div class="bar-col"><div class="bar" style="height:100%"><span class="v">219</span></div><div class="bar-lbl">11-17</div></div><div class="bar-col"><div class="bar zero"></div><div class="bar-lbl">11-18</div></div><div class="bar-col"><div class="bar zero"></div><div class="bar-lbl">11-19</div></div><div class="bar-col"><div class="bar zero"></div><div class="bar-lbl">11-20</div></div><div class="bar-col"><div class="bar zero"></div><div class="bar-lbl">11-21</div></div><div class="bar-col"><div class="bar zero"></div><div class="bar-lbl">11-22</div></div></div>
+    <p class="chart-caption">本周专注记录合计 379 min；峰值 11-17（219 min）。柱高对应当天实际专注分钟，供日分布速览。</p>
+  <!--{{/BARS}}-->
+  </div>
+
+  <!-- 项目任务 -->
+  <h2 class="sec"><span class="n">②</span> 本周任务 · 分项目</h2>
+  <hr class="secrule">
+
+  <!--{{PROJECTS}}-->
+    <div class="project"><div class="proj-head"><span class="nm">硕士论文大纲（腱驱动变刚度连续体机器人）</span><span class="total">8 番茄 · 379 min</span></div><div class="task"><div class="t"><span class="name">建立变刚度柔性臂结构几何模型</span><span class="badge">本周 60 min</span></div><p class="schedule">2 个番茄 · 60 min</p><ul><li><span class="day">11-16</span><span>绘制菱形晶胞结构实体</span><span class="pomo">30min</span></li><li><span class="day">11-16</span><span>建立菱形晶胞结构几何模型</span><span class="pomo">30min</span></li></ul></div><div class="task"><div class="t"><span class="name">驱动箱结构设计</span><span class="badge">本周 199 min</span></div><p class="schedule">4 个番茄 · 199 min</p><ul><li><span class="day">11-16</span><span>完成驱动箱电机选型</span><span class="pomo">50min</span></li><li><span class="day">11-16</span><span>完成绕线轮尺寸设计</span><span class="pomo">50min</span></li><li><span class="day">11-17</span><span>完成驱动丝传动机构设计</span><span class="pomo">39min</span></li><li><span class="day">11-17</span><span>内层伸缩机构结构设计</span><span class="pomo">60min</span></li></ul></div><div class="task"><div class="t"><span class="name">页末写取系数理由及3假设</span><span class="badge">本周 60 min</span></div><p class="schedule">1 个番茄 · 60 min</p><ul><li><span class="day">11-17</span><span>根据臂体刚度对直流减速电机的扭矩进行校核</span><span class="pomo">60min</span></li></ul></div><div class="task"><div class="t"><span class="name">控制箱结构设计</span><span class="badge">本周 60 min</span></div><p class="schedule">1 个番茄 · 60 min</p><ul><li><span class="day">11-17</span><span>完成控制箱的结构区域划分</span><span class="pomo">60min</span></li></ul></div></div>
+  <!--{{/PROJECTS}}-->
+
+  <!-- 笔记正文 AI 总结（由工作台「✦ AI 总结本周笔记」写入） -->
+  <h2 class="sec"><span class="n">③</span> 笔记内容 · AI 详细总结</h2>
+  <hr class="secrule">
+
+  <!--{{NOTES}}-->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div class="panel"><h3>本周主题</h3><ul class="kv" style="padding-left:0;list-style:none;margin:0;line-height:1.9"><li>· 选型库维护为主线</li><li>· BOM表与通信验证并行</li><li>· 多个项目笔记新建待填</li></ul></div><div class="panel"><h3>关键进展</h3><ul class="kv" style="padding-left:0;list-style:none;margin:0;line-height:1.9"><li>· wifi模块选型完善，传感器表转数据库</li><li>· goeasy双端联通已验证并截图存档</li><li>· 专题四PPT修订完成，已发课题组</li></ul></div><div class="panel"><h3>知识要点</h3><ul class="kv" style="padding-left:0;list-style:none;margin:0;line-height:1.9"><li>· goeasy双端配置需存端口、波特率三行记录</li><li>· 盲孔件需增放电工序，须在BOM备注</li><li>· 选型库其余部分仍待维护</li></ul></div><div class="panel"><h3>下周建议</h3><ul class="kv" style="padding-left:0;list-style:none;margin:0;line-height:1.9"><li>· 补盲孔增放电工序至BOM表</li><li>· TDCR通信复测并写结论</li><li>· 补齐KDZN、LQTS等空笔记</li></ul></div></div><div class="tags" style="margin-top:14px"><span>00-选型库索引</span><span>AI与智能工具</span><span>KDZN 柔性臂驱动箱</span><span>LQTS喷管主体 BOM表</span><span>LQTS控制器 BOM表</span><span>LQTS质量检测报告</span><span>TDCR 动力学模型</span><span>未归类</span><span>概念</span><span>求解与约束</span><span>理论基础</span><span>生活工具</span><span>硕士论文大纲（腱驱动变刚度连续体机器人）</span><span>系统环境</span><span>📚 网页资源 · 文章索引</span></div><p class="footnote" style="border:none;margin-top:12px;padding-top:0;font-size:11.5px">deepseek-v4-flash 生成于 2026-11-13 23:36，覆盖本周更新的 15 篇笔记。</p>
+  <!--{{/NOTES}}-->
+  <!-- 每日执行力（由工作台按云端历史推送，regen-server 渲染） -->
+  <h2 class="sec"><span class="n">④</span> 每日执行力 · 评分与用时</h2>
+  <hr class="secrule">
+  <!--{{CAPACITY}}-->{{CAPACITY}}<!--{{/CAPACITY}}-->
+
+
+  <!-- Kami 再生栏 -->
+  <div class="regenbar">
+    <div class="regen-meta">
+      <p class="regen-k">Kami · 自动生成</p>
+      <p class="regen-ts">上次更新：<b id="regenTime">2026-09-06 17:06</b></p>
+    </div>
+    <button id="regenBtn" class="regen-btn" type="button">↻ 重新生成界面</button>
+    <button id="pdfBtn" class="regen-btn" type="button">⇩ 导出 PDF</button>
+    <button id="pngBtn" class="regen-btn" type="button">⇩ 导出 PNG</button>
+  </div>
+  <div class="regen-status" id="regenStatus"></div>
+
+</div>
+<script>
+(function(){
+  "use strict";
+  // 若你有可触发的 mcp-task 端点，填在此处；点击时按钮会同时向它 POST 更新请求。
+  // 留空 = 仅记录/写入更新请求（宿主据此在本会话中调用 kami skills 重新生成界面）。
+  var REGEN_ENDPOINT = "";
+  var REQ_DIR = "D:\\5_database\\5_2_privdata\\dsdata\\_kami_regen\\weekly-summary.request.json";
+  var KEY = "kami.regen.last.weekly-summary";
+
+  var btn = document.getElementById("regenBtn");
+  var tsEl = document.getElementById("regenTime");
+  var stEl = document.getElementById("regenStatus");
+
+  function pad(n){ return (n<10?"0":"")+n; }
+  function nowStr(){
+    var d = new Date();
+    return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  }
+  function loadSaved(){
+    try{ var o = JSON.parse(localStorage.getItem(KEY)||"null"); if(o && o.at){ tsEl.textContent = o.at; stEl.textContent = "上次更新："+o.at+"；点击可再次重新生成"; } }catch(e){}
+  }
+
+  var REGEN_URL = "http://127.0.0.1:3918/regen";
+
+  btn.addEventListener("click", function(){
+    btn.disabled = true;
+    stEl.textContent = "正在读取最新数据并重新生成…";
+    var at = nowStr();
+    fetch(REGEN_URL, { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ window:"窗口1", target:"weekly-summary.html", at:at }) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        btn.disabled = false;
+        if(j && j.ok){
+          try{ localStorage.setItem(KEY, JSON.stringify({at:(j.at||at), ts:Date.now()})); }catch(e){}
+          stEl.textContent = "已用最新数据重新生成 · "+(j.at||at)+"，正在刷新…";
+          setTimeout(function(){ try{ location.reload(); }catch(e){} }, 800);
+        } else {
+          stEl.textContent = "重生成失败："+((j&&j.error)||"未知")+" · 请确认重生成服务(3918)已启动";
+        }
+      })
+      .catch(function(e){ btn.disabled = false; stEl.textContent = "无法连接重生成服务："+e.message; });
+  });
+
+  /* ---- 导出 PDF：调用本地 regen 服务(3918) 的 /pdf，用 Edge 无头打印本页为 PDF ---- */
+  var PDF_URL = "http://127.0.0.1:3918/pdf";
+  var pdfBtn = document.getElementById("pdfBtn");
+  pdfBtn.addEventListener("click", function(){
+    pdfBtn.disabled = true;
+    stEl.textContent = "正在导出 PDF…";
+    fetch(PDF_URL, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({}) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        pdfBtn.disabled = false;
+        if(j && j.ok){
+          stEl.textContent = "PDF 已导出 → "+(j.path||"")+"（"+Math.round((j.size||0)/1024)+" KB）";
+        } else {
+          stEl.textContent = "导出失败："+((j&&j.error)||"未知")+" · 请确认导出服务(3918)已启动";
+        }
+      })
+      .catch(function(e){ pdfBtn.disabled = false; stEl.textContent = "无法连接导出服务："+e.message; });
+  });
+
+  /* ---- 导出 PNG：调用 /png，用 Edge 无头截图本页 ---- */
+  var PNG_URL = "http://127.0.0.1:3918/png";
+  var pngBtn = document.getElementById("pngBtn");
+  pngBtn.addEventListener("click", function(){
+    pngBtn.disabled = true;
+    stEl.textContent = "正在导出 PNG…";
+    fetch(PNG_URL, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({}) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        pngBtn.disabled = false;
+        if(j && j.ok){
+          stEl.textContent = "PNG 已导出 → "+(j.path||"")+"（"+Math.round((j.size||0)/1024)+" KB）";
+        } else {
+          stEl.textContent = "导出失败："+((j&&j.error)||"未知")+" · 请确认导出服务(3918)已启动";
+        }
+      })
+      .catch(function(e){ pngBtn.disabled = false; stEl.textContent = "无法连接导出服务："+e.message; });
+  });
+
+  loadSaved();
+})();
+</script>
+<script>
+/* 每次加载都回到顶部：多次尝试，覆盖渲染完成后的自动滚动 */
+(function(){
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e){}
+  function top(){
+    try {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    } catch(e){}
+  }
+  top();
+  /* 页面渲染/字体加载后可能再次跳动，分几个时间点各压一次 */
+  [0, 30, 80, 150, 300, 600, 1200].forEach(function(ms){
+    setTimeout(top, ms);
+  });
+  window.addEventListener('load', top);
+  if (document.readyState === 'complete') top();
+})();
+</script>
+</body>
+</html>

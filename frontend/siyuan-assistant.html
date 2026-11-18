@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>剪藏助手</title>
+  <link rel="stylesheet" href="/api/worktable/template/dshell.css" />
+  <style>
+    .sy { display:flex; flex-direction:column; gap:10px; height:100vh; overflow:hidden; }
+    .sy-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:0 0 auto; }
+    .sy-tabs { flex:0 0 auto; }
+    .sy-page { flex:1 1 0; min-height:0; display:flex; flex-direction:column; gap:10px; overflow-y:auto; overflow-x:hidden; }
+    .sy-page[hidden] { display:none; }
+    /* 统一滚动条样式（随主题） */
+    .sy ::-webkit-scrollbar { width:10px; height:10px; }
+    .sy ::-webkit-scrollbar-thumb { background:var(--dsw-alias-border-l2,#3a4150); border-radius:6px; border:2px solid transparent; background-clip:padding-box; }
+    .sy ::-webkit-scrollbar-thumb:hover { background:var(--dsw-alias-border-l3,#4a5260); border:2px solid transparent; background-clip:padding-box; }
+    .sy ::-webkit-scrollbar-track { background:transparent; }
+    .sy { scrollbar-width:thin; scrollbar-color:var(--dsw-alias-border-l2,#3a4150) transparent; }
+    .sy-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .sy-grow { flex:1 1 auto; }
+    .sy-box { border:1px solid var(--dsw-alias-border-l1,#262b36); border-radius:8px; background:var(--dsw-alias-bg-l1,#0b0e13); padding:8px 10px; }
+    .sy-label { font-size:12px; color:var(--dsw-alias-label-secondary,#9aa4b2); margin:0 0 4px; }
+    .sy-inline { display:flex; gap:8px; align-items:center; }
+    .sy-textarea { width:100%; min-height:200px; resize:vertical; font-family:"Cascadia Mono","Consolas","Menlo",monospace; font-size:12px; line-height:1.6; }
+    .sy-term { white-space:pre-wrap; word-break:break-all; font-family:"Cascadia Mono","Consolas","Menlo",monospace; font-size:12px; line-height:1.5; user-select:text; max-height:260px; overflow:auto; }
+    .sy-log { white-space:pre-wrap; font-size:12px; color:var(--dsw-alias-label-secondary,#9aa4b2); max-height:140px; overflow:auto; line-height:1.5; }
+    .sy-cmd { user-select:text; }
+    .sy-copy { flex:0 0 auto; }
+    .sy-note { font-size:11.5px; color:var(--dsw-alias-label-secondary,#9aa4b2); line-height:1.5; }
+    .sy-card { padding:10px; }
+    .sy-btn { padding:4px 10px; font-size:12px; }
+    .sy-sel, .sy-inp { width:auto; }
+    .sy-sel { min-width:200px; }
+    select.sy-sel, select.dshell-input option { background:#14181f; color:#e6e8eb; }
+    .sy-statusline { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--dsw-alias-label-secondary,#9aa4b2); }
+    .sy-headnote { font-size:11.5px; color:var(--dsw-alias-label-secondary,#9aa4b2); line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="sy">
+  <div class="sy-head">
+    <h1 class="dshell-title" style="margin:0">剪藏助手</h1>
+    <span class="dshell-badge dshell-badgeWait" id="connBadge">未连接</span>
+    <span class="sy-grow"></span>
+    <span class="sy-headnote">爬取网页 → 整理为 Markdown → 一键存进思源笔记</span>
+  </div>
+
+    <div class="sy-mode" id="navMode" style="align-self:flex-start;margin:2px 0">
+      <button class="sy-modeBtn sy-modeOn" data-nav="crawl" id="navCrawl">爬取</button>
+      <button class="sy-modeBtn" data-nav="dl" id="navDl">下载助手</button>
+    </div>
+
+  <!-- ============ 一键爬虫 ============ -->
+  <div class="sy-page" id="tab-crawl">
+    <div class="sy-row">
+      <input id="crawlUrl" class="dshell-input sy-grow" type="text"
+             placeholder="粘贴网页链接 → 一键爬取；输入文字 → 知乎搜索" spellcheck="false" />
+      <button class="dshell-btn sy-btn" id="btnCrawl">一键爬取</button>
+      <button class="dshell-btn sy-btn" id="btnZhSearch">知乎搜索</button>
+      <button class="dshell-btn dshell-btnGhost sy-btn" id="btnZhHot">知乎热榜</button>
+      <button class="dshell-btn dshell-btnGhost sy-btn" id="btnClearCrawl">清空</button>
+    </div>
+    <div class="sy-statusline" id="crawlStatus"></div>
+    <div class="sy-row">
+      <span class="sy-label" style="flex:none">标题</span>
+      <input id="docTitle" class="dshell-input sy-grow" type="text" placeholder="文档标题（自动识别，可改）" spellcheck="false" />
+    </div>
+
+    <div class="sy-row">
+      <span class="sy-label">正文</span>
+      <span class="sy-grow"></span>
+      <div class="sy-mode" id="modeSeg">
+        <button class="sy-modeBtn sy-modeOn" id="btnModeSrc" data-mode="source">编辑</button>
+        <button class="sy-modeBtn" id="btnModePrev" data-mode="preview">预览</button>
+      </div>
+    </div>
+    <div class="sy-box" style="display:flex;flex-direction:column;min-height:0;flex:1 1 0">
+      <textarea id="mdContent" class="sy-textarea sy-view" spellcheck="false"
+                placeholder="爬取结果将显示在这里，可手动修改或直接粘贴 Markdown"></textarea>
+      <div id="mdPreview" class="sy-term sy-view" style="display:none;flex:1 1 0;min-height:0;overflow:auto"></div>
+    </div>
+
+    <div class="sy-row sy-savebar">
+      <span class="sy-label" style="flex:none">保存到思源</span>
+      <select id="cjNb" class="dshell-input sy-sel"></select>
+      <input id="cjPath" class="dshell-input" style="flex:1 1 auto" placeholder="目标目录，默认 /（可用 笔记本id/子目录/）" value="/" spellcheck="false" />
+      <button class="dshell-btn sy-btn" id="btnSaveCnz">保存</button>
+    </div>
+    <div class="sy-statusline" id="saveStatus"></div>
+  </div>
+
+  <!-- ============ 下载助手(知网 / 谷歌学术 PDF) ============ -->
+  <div class="sy-page" id="tab-dl" hidden>
+    <div class="sy-row">
+      <span class="sy-label" style="flex:none">来源</span>
+      <div class="sy-mode" id="dlSrcSeg">
+        <button class="sy-modeBtn sy-modeOn" data-dlsrc="cnki">中国知网</button>
+        <button class="sy-modeBtn" data-dlsrc="scholar">谷歌学术</button>
+        <button class="sy-modeBtn" data-dlsrc="link">单篇链接</button>
+      </div>
+    </div>
+    <div class="sy-row">
+      <input id="dlKw" class="dshell-input sy-grow" type="text" placeholder="知网搜索关键词，如：连续体机器人" spellcheck="false" />
+      <span class="sy-label" id="dlPageSep">—</span>
+      <input id="dlFrom" class="dshell-input" type="text" value="1" style="width:52px" title="起始页" />
+      <span class="sy-label">—</span>
+      <input id="dlTo" class="dshell-input" type="text" value="2" style="width:52px" title="结束页" />
+      <button class="dshell-btn sy-btn" id="btnDl">开始下载 PDF</button>
+    </div>
+    <div class="sy-row">
+      <span class="sy-label" style="flex:none">保存到</span>
+      <input id="dlDir" class="dshell-input sy-grow" type="text" value="D:/cnki_pdfs" placeholder="PDF 保存目录（可改）" spellcheck="false" />
+    </div>
+    <div class="sy-statusline" id="dlStatus"></div>
+    <div class="sy-box" style="flex:0 1 auto;min-height:60px;max-height:58vh;overflow:auto">
+      <div class="sy-log" id="dlLog" style="white-space:pre-wrap;color:#2b2822">说明：知网逐页下载 PDF（存到 D:/cnki_pdfs/关键词/）。若弹出浏览器验证码，请手动完成。</div>
+      <div id="dlManual" style="display:none;padding:8px;line-height:1.8"></div>
+    </div>
+  </div>
+
+  <!-- ============ 保存到思源 ============ -->
+  <div class="sy-page" id="tab-save" hidden>
+    <div class="dshell-card sy-card">
+      <div class="dshell-kv">
+        <div class="dshell-kvRow">
+          <span class="dshell-kvKey">目标工作区</span>
+          <span class="dshell-kvValue"><select id="saveWorkspace" class="dshell-input sy-sel"></select></span>
+        </div>
+        <div class="dshell-kvRow">
+          <span class="dshell-kvKey">笔记本</span>
+          <span class="dshell-kvValue" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <select id="saveNotebookSel" class="dshell-input sy-sel" style="min-width:220px"></select>
+            <button class="dshell-btn dshell-btnGhost sy-btn" id="btnReloadNb">刷新笔记本</button>
+          </span>
+        </div>
+        <div class="dshell-kvRow">
+          <span class="dshell-kvKey">保存位置</span>
+          <span class="dshell-kvValue" style="display:block;width:100%">
+            <div class="sy-row" style="margin-bottom:4px">
+              <span class="sy-note" id="saveLocPath" style="flex:1 1 auto;user-select:text"></span>
+              <button class="dshell-btn dshell-btnGhost sy-btn" id="btnLocUp">上一级</button>
+              <button class="dshell-btn dshell-btnGhost sy-btn" id="btnLocRoot">根目录</button>
+            </div>
+            <div id="saveLocList" class="sy-box" style="min-height:84px;max-height:190px;overflow:auto;font-size:12px"></div>
+          </span>
+        </div>
+        <div class="dshell-kvRow">
+          <span class="dshell-kvKey">文档标题</span>
+          <span class="dshell-kvValue"><input id="saveTitle" class="dshell-input" type="text" style="width:260px" placeholder="留空则用爬取标题" spellcheck="false" /></span>
+        </div>
+      </div>
+      <div class="sy-note" id="nbHelp" style="margin-top:6px"></div>
+    </div>
+
+    <div class="sy-row">
+      <button class="dshell-btn sy-btn" id="btnDirect">保存到思源</button>
+      <button class="dshell-btn dshell-btnGhost sy-btn" id="btnGenCmd">生成终端命令</button>
+      <span class="dshell-badge" id="saveModeBadge">等待保存</span>
+    </div>
+
+    <div class="sy-box" style="flex:0 0 auto">
+      <div class="sy-label">生成结果（复制后在工作台「终端」窗口粘贴运行）</div>
+      <div class="sy-term sy-cmd" id="cmdOut">—</div>
+      <div class="sy-row" style="margin-top:6px">
+        <button class="dshell-btn dshell-btnGhost sy-btn sy-copy" id="btnCopyCmd">复制命令</button>
+        <button class="dshell-btn dshell-btnGhost sy-btn sy-copy" id="btnCopyMd">复制正文</button>
+        <span class="sy-note" id="savedFileNote"></span>
+      </div>
+    </div>
+
+    <div class="sy-box" style="flex:1 1 0;min-height:0;overflow:auto">
+      <div class="sy-label">操作日志</div>
+      <div class="sy-log" id="saveLog"></div>
+    </div>
+  </div>
+
+  <!-- ============ 命令库 ============ -->
+  <div class="sy-page" id="tab-cmd" hidden>
+    <p class="sy-note">思源笔记官方 CLI（<code>siyuan</code>）常用命令。复制后在 DSH 工作台「终端」窗口运行。
+      首次使用建议先运行 <code>siyuan --help</code>。数据工作区用 <code>-w &lt;工作区路径&gt;</code> 指定。</p>
+    <div id="cmdLib"></div>
+  </div>
+
+  <!-- ============ 连接设置 ============ -->
+  <div class="sy-page" id="tab-settings" hidden>
+    <div class="dshell-card sy-card">
+      <div class="dshell-kv">
+        <div class="dshell-kvRow"><span class="dshell-kvKey">内核地址</span><span class="dshell-kvValue"><input id="setBase" class="dshell-input" type="text" style="width:240px" /></span></div>
+        <div class="dshell-kvRow"><span class="dshell-kvKey">API Token</span><span class="dshell-kvValue"><input id="setToken" class="dshell-input" type="password" style="width:260px" /></span></div>
+        <div class="dshell-kvRow"><span class="dshell-kvKey">抓取服务</span><span class="dshell-kvValue"><input id="setScrape" class="dshell-input" type="text" style="width:240px" placeholder="http://127.0.0.1:3920（留空用默认）" /></span></div>
+      </div>
+      <div class="sy-row" style="margin-top:8px">
+        <button class="dshell-btn sy-btn" id="btnTestConn">测试连接</button>
+        <button class="dshell-btn dshell-btnGhost sy-btn" id="btnSaveSettings">保存设置</button>
+        <span class="sy-note">直连保存使用思源内核 HTTP 接口（默认 http://127.0.0.1:6806，Token 见工作区 conf/conf.json 的 api.token）。
+          抓取服务默认连本机 3920，可留空；连不上时自动改用 r.jina.ai。</span>
+      </div>
+      <div class="sy-log" id="connLog" style="margin-top:6px"></div>
+    </div>
+    <div class="dshell-card sy-card">
+      <div class="sy-label">已检测到的工作区（可在此确认目标）</div>
+      <div id="wsList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  // 思源工作区列表（路径 + 内核地址）。
+  // ⚠ 这里**不放 token**：仓库是公开的，凭据一律从本机 localStorage 读。
+  //   每个工作区的 token 存在 dsh.worktable.siyuanTokens.v1（按 work 名索引），
+  //   首次使用时在「连接设置」里填一次即可，之后自动复用。
+  //   只有内核地址（6806）是可读写实例；6808 等是只读发布端口，写操作会被拒。
+  const WORKS = [
+    {name:"0_7_output/output", path:"D:\\0_study\\0_7_output\\output"},
+    {name:"sydata/SiYuan", path:"D:\\5_database\\5_2_privdata\\sydata\\SiYuan"},
+    {name:"sydata/toss",   path:"D:\\5_database\\5_2_privdata\\sydata\\toss"},
+    {name:"sydata/实验数据", path:"D:\\5_database\\5_2_privdata\\sydata\\实验数据"},
+    {name:"0_0_学习规划/plan", path:"D:\\0_study\\0_0_学习规划\\plan"}
+  ];
+  /* 按工作区名取 token；没有就返回空串（提示用户去填） */
+  function tokenOf(name){
+    try{
+      const m = JSON.parse(localStorage.getItem("dsh.worktable.siyuanTokens.v1") || "{}");
+      return String(m[name] || "");
+    }catch(e){ return ""; }
+  }
+  /* 记住某个工作区的 token */
+  function setTokenOf(name, tk){
+    try{
+      const m = JSON.parse(localStorage.getItem("dsh.worktable.siyuanTokens.v1") || "{}");
+      if (tk) m[name] = tk; else delete m[name];
+      localStorage.setItem("dsh.worktable.siyuanTokens.v1", JSON.stringify(m));
+    }catch(e){}
+  }
+  /* 给每个工作区补齐 base / token 字段（base 统一用本机内核） */
+  WORKS.forEach(w => { w.base = "http://127.0.0.1:6806"; w.token = tokenOf(w.name); });
+  const PROJECT = "D:\\5_database\\5_2_privdata\\dsdata";
+  const WRITE_API = "/api/worktable/write";
+
+  const state = {
+    workspace: WORKS[0],
+    base: WORKS[0].base,
+    token: WORKS[0].token,
+    connected: false
+  };
+
+  function log(el, s){ const n=el.cloneNode(false); n.textContent="["+new Date().toLocaleTimeString()+"] "+s; el.appendChild(n); el.scrollTop=el.scrollHeight; }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  function copyText(s){
+    if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(s); }
+    const t=document.createElement("textarea"); t.value=s; document.body.appendChild(t); t.select();
+    document.execCommand("copy"); document.body.removeChild(t); return Promise.resolve();
+  }
+  function flash(btn, txt){ const old=btn.textContent; btn.textContent=txt||"已复制"; setTimeout(()=>btn.textContent=old,1200); }
+
+  // ---------- 爬虫 ----------
+  /* 抓取服务地址。
+     默认连本机 127.0.0.1:3920（工作台会自己拉起它）。
+     如果抓取服务跑在别的服务器上，改这里：
+        dsh.worktable.scrape.v1 = { "base": "http://your-server:3920" }
+     连不上时自动回落到 r.jina.ai；再失败则提示手动粘贴正文。 */
+  const SCRAPE_DEFAULT = "http://127.0.0.1:3920";
+  function scrapeBase(){
+    try{
+      const o = JSON.parse(localStorage.getItem("dsh.worktable.scrape.v1") || "{}");
+      const b = String(o.base || "").trim().replace(/\/+$/, "");
+      return b || SCRAPE_DEFAULT;
+    }catch(e){ return SCRAPE_DEFAULT; }
+  }
+  async function crawl(url){
+    const st=$("crawlStatus");
+    let text="", src="";
+    const BASE = scrapeBase();
+    // 1) 优先抓取服务（免费、不耗 token）
+    st.innerHTML = '<span class="dshell-badge dshell-badgeWait">抓取中</span> 抓取服务…';
+    try{
+      const r = await fetch(BASE + "/fetch?url=" + encodeURIComponent(url));
+      if(r.ok){ const j = await r.json().catch(()=>null); if(j && j.ok && j.text){ text = j.text; src="remote"; } }
+    }catch(e){}
+    // 2) 服务不可用时退回 r.jina.ai
+    if(!text){
+      st.innerHTML = '<span class="dshell-badge dshell-badgeWait">抓取中</span> 服务不可用，改用 r.jina.ai…';
+      try{
+        const res = await fetch("https://r.jina.ai/" + url, {headers:{Accept:"text/plain"}});
+        if(!res.ok) throw new Error("HTTP "+res.status);
+        text = await res.text(); src="jina";
+      }catch(e){
+        st.innerHTML = '<span class="dshell-badge">失败</span> '+esc(e.message||e);
+        st.innerHTML += '<div class="sy-note">若网络受限，请把网页正文以 Markdown 直接粘贴到下方文本框，再保存。</div>';
+        return;
+      }
+    }
+    $("mdContent").value = (text||"").trim();
+    const m = text.match(/^#\s+(.+)$/m);
+    let title = m ? m[1].trim() : "";
+    if(!title){ try{ title = new URL(url).hostname.replace(/^www\./,""); }catch(e){ title="爬取内容"; } }
+    $("docTitle").value = title;
+    st.innerHTML = '<span class="dshell-badge dshell-badgeDone">完成</span> '
+      +(src==="remote"?"抓取服务":"r.jina.ai")+' 抓取 '+text.length+' 字符';
+    renderMarkdown(); setMode("preview");
+  }
+  function renderMarkdown(){
+    const pre=$("mdPreview"); if(!pre) return;
+    const md=$("mdContent").value;
+    let h = esc(md);
+    h = h.replace(/```([\s\S]*?)```/g, (m,c)=>'<pre class="sy-mdpre">'+c+'</pre>');
+    h = h.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m,alt,src)=>{ src=src.trim(); if(src.indexOf("//")===0) src="https:"+src; return '<img class="sy-img" src="'+src+'" alt="'+alt+'" referrerpolicy="no-referrer" />'; });
+    h = h.replace(/^### (.*)$/gm,'<h3>$1</h3>');
+    h = h.replace(/^## (.*)$/gm,'<h2>$1</h2>');
+    h = h.replace(/^# (.*)$/gm,'<h1>$1</h1>');
+    h = h.replace(/^[-*] (.*)$/gm,'<div class="sy-mdli">• $1</div>');
+    h = h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+    h = h.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m,t,url)=>{ url=url.trim(); if(url.indexOf("//")===0) url="https:"+url; return '<a href="'+url+'" target="_blank" rel="noopener">'+t+'</a>'; });
+    h = h.replace(/`([^`]+)`/g,'<code class="sy-mdcode">$1</code>');
+    h = h.replace(/\n/g,'<br/>');
+    pre.innerHTML = h;
+  }
+  function setMode(m){
+    const src=$("mdContent"), prev=$("mdPreview");
+    if(!src || !prev) return;
+    document.querySelectorAll(".sy-modeBtn").forEach(b=>b.classList.toggle("sy-modeOn", b.dataset.mode===m));
+    if(m==="preview"){ src.style.display="none"; prev.style.display="block"; renderMarkdown(); }
+    else { prev.style.display="none"; src.style.display="block"; }
+  }
+
+  // ---------- 写入项目文件 ----------
+  async function writeProjectFile(fname, content){
+    const res = await fetch(WRITE_API, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ path: PROJECT + "\\" + fname, content: content })
+    });
+    const j = await res.json().catch(()=>({ok:false}));
+    return { ok: !!j.ok, path: PROJECT + "\\" + fname };
+  }
+
+  // ---------- 直连 API ----------
+  async function apiCall(ep, body){
+    const res = await fetch(state.base + "/api/" + ep, {
+      method:"POST", headers:{"Content-Type":"application/json", Authorization:"Token "+state.token},
+      body: JSON.stringify(body||{})
+    });
+    if(res.status===401) throw new Error("Token 无效或需要更新（401）");
+    if(res.status===403) throw new Error("该端口为只读，写操作被拒（403），请在「连接设置」使用内核 6806 地址");
+    if(res.status===429) throw new Error("思源内核限流（429），请稍后再试");
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return res.json();
+  }
+
+  // ---------- 保存到思源：位置选择 ----------
+  const loc = { path: "/", names: [] }; // names[0]=笔记本名，其后为各级文件夹名
+
+  async function loadNotebooks(){
+    if(!state.connected) return false;
+    try{
+      const j = await apiCall("notebook/lsNotebooks");
+      if(j.code!==0) throw new Error(j.msg||"列出笔记本失败");
+      const nbs = j.data.notebooks || [];
+      const sel = $("saveNotebookSel");
+      sel.innerHTML = "";
+      nbs.forEach(n=>{ const o=document.createElement("option"); o.value=n.id; o.textContent=n.name+"  ("+n.id+")"; sel.appendChild(o); });
+      if(!nbs.length){ sel.innerHTML='<option value="">（无笔记本）</option>'; return false; }
+      const cur = state.locNb && nbs.some(n=>n.id===state.locNb) ? state.locNb : nbs[0].id;
+      sel.value = cur; state.locNb = cur;
+      loc.names = [ (sel.options[sel.selectedIndex]||{}).textContent.split("  (")[0] || "笔记本" ];
+      loc.path = "/";
+      refreshLoc();
+      $("nbHelp").innerHTML = "点击上方文件夹可进入子目录；保存的文档将创建在当前所在位置之下。";
+      return true;
+    }catch(e){
+      $("nbHelp").innerHTML = '<span class="dshell-badge">失败</span> '+esc(e.message||e);
+      return false;
+    }
+  }
+
+  async function refreshLoc(){
+    const nb = $("saveNotebookSel").value;
+    const box = $("saveLocList");
+    if(!nb){ box.innerHTML='<div class="sy-note">请先连接并选择笔记本</div>'; return; }
+    $("saveLocPath").textContent = loc.names.join(" / ") + " /";
+    try{
+      const j = await apiCall("filetree/listDocsByPath", { notebook: nb, path: loc.path });
+      const files = (j.data && j.data.files) || [];
+      box.innerHTML = "";
+      if(!files.length){ box.innerHTML='<div class="sy-note">（空文件夹，文档将创建在此处）</div>'; return; }
+      files.forEach(f=>{
+        const row=document.createElement("div");
+        row.style.cssText="display:flex;gap:6px;align-items:center;padding:3px 4px;border-radius:6px;cursor:pointer;user-select:none;font-size:12px";
+        row.innerHTML = '<span>'+(f.subFileCount>0?'📁':'📄')+'</span>'+
+          '<span style="flex:1 1 auto">'+esc(f.name||"（无标题）")+'</span>'+
+          (f.subFileCount>0?'<span class="dshell-badge">'+f.subFileCount+'</span>':'');
+        row.onmouseenter=()=>row.style.background="var(--dsw-alias-fill-l2,rgba(255,255,255,.06))";
+        row.onmouseleave=()=>row.style.background="transparent";
+        row.onclick=()=>{ if(f.subFileCount>0) enterFolder(f); };
+        box.appendChild(row);
+      });
+    }catch(e){ box.innerHTML='<div class="sy-note">加载失败：'+esc(e.message||e)+'</div>'; }
+  }
+  function enterFolder(f){
+    const base = (f.path||"").replace(/^\/?/, "").replace(/\.sy$/, "");
+    loc.path = base + "/";
+    loc.names.push(f.name||"（无标题）");
+    refreshLoc();
+  }
+  function upLoc(){
+    if(loc.path==="/" || loc.names.length<=1) return;
+    loc.names.pop();
+    const parts = loc.path.split("/").filter(Boolean);
+    parts.pop();
+    loc.path = parts.length ? parts.join("/")+"/" : "/";
+    refreshLoc();
+  }
+  function rootLoc(){
+    loc.names = loc.names.slice(0,1);
+    loc.path = "/";
+    refreshLoc();
+  }
+  function onNotebookChange(){
+    const sel=$("saveNotebookSel");
+    loc.names = [ (sel.options[sel.selectedIndex]||{}).textContent.split("  (")[0] || "笔记本" ];
+    loc.path = "/";
+    refreshLoc();
+  }
+
+  // ---------- 保存到思源：直连保存 ----------
+  async function directSave(){
+    const content = $("mdContent").value.trim();
+    if(!content) throw new Error("请先爬取或输入正文");
+    const nb = $("saveNotebookSel").value; if(!nb) throw new Error("请先选择笔记本");
+    const title = ($("saveTitle").value||$("docTitle").value||"").trim() || "未命名文档";
+    // 1) 在所选位置创建文档（返回新文档 id）
+    const c = await apiCall("filetree/createDocWithMd", { notebook: nb, path: loc.path, markdown: content });
+    if(c.code!==0) throw new Error(c.msg||"创建文档失败");
+    const id = c.data;
+    // 2) 用标题重命名该文档
+    if(title){
+      const docPath = (loc.path==="/" ? "/" : loc.path) + id + ".sy";
+      const r = await apiCall("filetree/renameDoc", { notebook: nb, path: docPath, title: title });
+      if(r.code!==0) throw new Error("已创建但改名失败："+(r.msg||""));
+    }
+    return { nbId:nb, docId:id, title:title, path:loc.path };
+  }
+
+  // ---------- 生成终端命令 ----------
+  async function genSaveCommand(){
+    const content = $("mdContent").value.trim();
+    if(!content){ $("cmdOut").textContent="请先爬取或输入正文"; return null; }
+    const ws = state.workspace;
+    const nb = $("saveNotebookSel").value;
+    const humanPath = loc.names.join("/") || "/";
+    const fname = "crawled-" + new Date().toISOString().slice(0,19).replace(/[:T]/g,"-") + ".md";
+    const w = await writeProjectFile(fname, content);
+    $("savedFileNote").textContent = w.ok ? "已写入文件："+w.path : "文件写入失败";
+    const cmd = nb
+      ? 'siyuan import md --file "' + w.path + '" --notebook "' + nb + '" --path "' + humanPath + '" -w "' + ws.path + '"'
+      : 'REM 先列出笔记本获取 ID：\r\nsiyuan notebook list -w "' + ws.path + '"\r\nREM 再导入：\r\nsiyuan import md --file "' + w.path + '" --notebook "<笔记本ID>" --path "/" -w "' + ws.path + '"';
+    $("cmdOut").textContent = cmd;
+    return cmd;
+  }
+
+  // ---------- 命令库 ----------
+  const CMDS = [
+    {t:"查看版本与帮助", c:"siyuan --help", d:"列出所有子命令"},
+    {t:"列出所有笔记本", c:'siyuan notebook list -w "<工作区路径>"', d:"拿到 notebook ID（导入/建文档要用）"},
+    {t:"新建笔记本", c:'siyuan notebook create --name "笔记本名" -w "<工作区路径>"', d:""},
+    {t:"列出笔记本内文档", c:'siyuan document list --notebook "<ID>" -w "<工作区路径>"', d:""},
+    {t:"新建文档（带内容）", c:'siyuan document create --notebook "<ID>" --title "标题" --markdown "## 正文" -w "<工作区路径>"', d:""},
+    {t:"导入 Markdown 文件", c:'siyuan import md --file "D:\\x.md" --notebook "<ID>" -w "<工作区路径>"', d:"最常用：把爬取的 .md 文件一键导入"},
+    {t:"在文档末尾追加内容", c:'siyuan block append --parent "<文档块ID>" --file "D:\\x.md" -w "<工作区路径>"', d:""},
+    {t:"全文搜索", c:'siyuan search "关键词" -w "<工作区路径>"', d:""},
+    {t:"导出为 Markdown", c:'siyuan export md --id "<文档ID>" -o "D:\\out" -w "<工作区路径>"', d:""},
+    {t:"导出为 Word", c:'siyuan export docx --id "<文档ID>" -o "D:\\out" -w "<工作区路径>"', d:""},
+    {t:"SQL 查询", c:'siyuan sql "select * from blocks limit 5" -w "<工作区路径>"', d:""},
+    {t:"运行内核 HTTP 服务", c:'siyuan serve -w "<工作区路径>"', d:"用于调试/直连接口"}
+  ];
+  function renderCmdLib(){
+    const box=$("cmdLib"); box.innerHTML="";
+    CMDS.forEach(c=>{
+      const card=document.createElement("div"); card.className="dshell-card sy-card"; card.style.marginBottom="8px";
+      card.innerHTML = '<div class="sy-row"><span class="sy-note" style="font-weight:600">'+esc(c.t)+'</span><span class="sy-grow"></span>'+
+        '<button class="dshell-btn dshell-btnGhost sy-btn sy-copy" data-cmd="'+esc(c.c)+'">复制</button></div>'+
+        '<div class="sy-term sy-cmd">'+esc(c.c)+'</div>'+
+        (c.d?'<div class="sy-note">'+esc(c.d)+'</div>':"");
+      box.appendChild(card);
+    });
+    box.querySelectorAll("[data-cmd]").forEach(b=>{
+      b.onclick=()=>{ copyText(b.dataset.cmd); flash(b); };
+    });
+  }
+
+  // ---------- 设置 / 连接 ----------
+  function syncWsEndpoint(){
+    state.base = state.workspace.base || "http://127.0.0.1:6806";
+    state.token = state.workspace.token || "";
+    $("setBase").value = state.base;
+    $("setToken").value = state.token;
+  }
+  function loadSettings(){
+    const s={};
+    try{ Object.assign(s, JSON.parse(localStorage.getItem("siyuanAssistant")||"{}")); }catch(e){}
+    // 连接统一复用外层「学习助手」已保存的设置（同源，消除重复配置）
+    try{ const out=JSON.parse(localStorage.getItem("dsh.worktable.learninggraph.v1")||"{}"); if(out&&out.base) s.base=out.base; if(out&&out.token) s.token=out.token; }catch(e){}
+    if(s.workspaceIdx!=null){ state.workspace=WORKS[s.workspaceIdx]||WORKS[0]; }
+    state.base=s.base||state.workspace.base||"http://127.0.0.1:6806";
+    state.token=s.token||state.workspace.token||"";
+    $("setBase").value=state.base;
+    $("setToken").value=state.token;
+    /* 抓取服务地址：留空表示用默认本机 3920 */
+    const sc = $("setScrape");
+    if (sc) {
+      try{
+        const o = JSON.parse(localStorage.getItem("dsh.worktable.scrape.v1") || "{}");
+        sc.value = String(o.base || "");
+      }catch(e){ sc.value = ""; }
+    }
+    renderWorkspaces();
+  }
+  function saveSettings(){
+    state.base=$("setBase").value.trim()||"http://127.0.0.1:6806";
+    state.token=$("setToken").value.trim()||state.workspace.token;
+    /* token 按工作区名单独存一份：代码里不再硬编码凭据（仓库是公开的） */
+    if (state.token) setTokenOf(state.workspace.name, state.token);
+    try{ localStorage.setItem("siyuanAssistant", JSON.stringify({workspaceIdx:WORKS.indexOf(state.workspace), base:state.base, token:state.token})); }catch(e){}
+    /* 抓取服务地址：填了就存，留空就删（前端会用默认的 127.0.0.1:3920） */
+    const sc = $("setScrape");
+    if (sc) {
+      try{
+        const v = sc.value.trim().replace(/\/+$/, "");
+        if (v) localStorage.setItem("dsh.worktable.scrape.v1", JSON.stringify({ base: v }));
+        else localStorage.removeItem("dsh.worktable.scrape.v1");
+      }catch(e){}
+    }
+    $("connLog").textContent="设置已保存";
+  }
+  function renderWorkspaces(){
+    const sel=$("saveWorkspace"); sel.innerHTML="";
+    WORKS.forEach((w,i)=>{
+      const o=document.createElement("option"); o.value=i; o.textContent=w.name+"  ·  "+w.path; sel.appendChild(o);
+    });
+    sel.value=WORKS.indexOf(state.workspace);
+    // 连接设置页展示
+    $("wsList").innerHTML = WORKS.map((w,i)=>{
+      const cur=w===state.workspace;
+      return '<div class="dshell-listItem" style="padding:6px 0"><span class="dshell-listItemTitle">'+esc(w.path)+'</span>'+
+        (cur?'<span class="dshell-badge dshell-badgeDone">当前目标</span>':'')+
+        '<button class="dshell-btn dshell-btnGhost sy-btn sy-copy" data-wi="'+i+'" style="margin-left:8px">设为目标</button></div>';
+    }).join("");
+    $("wsList").querySelectorAll("[data-wi]").forEach(b=>{ b.onclick=()=>{ state.workspace=WORKS[+b.dataset.wi]; renderWorkspaces(); syncWsEndpoint(); }; });
+  }
+  async function testConn(){
+    const log=$("connLog"); log.textContent="测试中…";
+    try{
+      const j=await apiCall("notebook/lsNotebooks");
+      if(j.code!==0) throw new Error(j.msg||"失败");
+      const nbs=j.data.notebooks||[];
+      state.connected=true;
+      $("connBadge").className="dshell-badge dshell-badgeDone"; $("connBadge").textContent="已连接";
+      log.textContent="连接成功，检测到 "+nbs.length+" 个笔记本。";
+      await loadNotebooks();
+    }catch(e){
+      state.connected=false;
+      $("connBadge").className="dshell-badge"; $("connBadge").textContent="未连接";
+      log.textContent="连接失败："+(e.message||e)+"。"+(/401|429/.test(e.message||"")?"建议改用命令模式。":"请检查地址与 Token。");
+    }
+  }
+
+  // ---------- 事件绑定 ----------
+  document.querySelectorAll(".dshell-tab").forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll(".dshell-tab").forEach(x=>x.classList.remove("dshell-tabOn"));
+      b.classList.add("dshell-tabOn");
+      document.querySelectorAll(".sy-page").forEach(p=>p.hidden=true);
+      $("tab-"+b.dataset.tab).hidden=false;
+    };
+  });
+
+  function stamp(){
+    const d=new Date(); function p(n){return (n<10?"0":"")+n;}
+    return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
+  }
+  async function loadCjNb(){
+    const sel=$("cjNb"); if(!sel) return;
+    try{
+      const nbs = await apiCall("notebook/lsNotebooks").then(j=>(j.data&&j.data.notebooks)||[]);
+      sel.innerHTML="";
+      nbs.forEach(n=>{ const o=document.createElement("option"); o.value=n.id; o.textContent=n.name; sel.appendChild(o); });
+      if(!nbs.length) sel.innerHTML='<option value="">（无笔记本）</option>';
+    }catch(e){ sel.innerHTML='<option value="">连接失败</option>'; }
+  }
+  async function saveCnz(){
+    const st=$("saveStatus"); const nb=$("cjNb").value; const content=$("mdContent").value.trim();
+    if(!content){ st.textContent="请先爬取/抓取内容"; return; }
+    if(!nb){ st.textContent="请先选择笔记本"; return; }
+    const title = (($("docTitle").value||"剪藏").trim() + " " + stamp());
+    let path = (($("cjPath").value||"/").trim()||"/");
+    st.textContent="正在写入思源…";
+    try{
+      const c = await apiCall("filetree/createDocWithMd", { notebook:nb, path:path, markdown:content });
+      if(c.code!==0) throw new Error(c.msg||"创建文档失败");
+      const id = c.data;
+      const docPath = (path==="/" ? "/" : path.replace(/\/+$/,"")+"/") + id + ".sy";
+      const r = await apiCall("filetree/renameDoc", { notebook:nb, path:docPath, title:title });
+      if(r.code!==0) throw new Error("已创建但改名失败："+(r.msg||""));
+      st.textContent="已保存到思源："+title;
+    }catch(e){ st.textContent="保存失败："+(e.message||e); }
+  }
+  function isUrl(v){ return /^(https?:\/\/|www\.)/i.test(String(v||"").trim()); }
+  function refreshMode(){
+    const v=$("crawlUrl").value.trim();
+    const url=isUrl(v);
+    $("btnCrawl").disabled = !v || !url;
+    $("btnZhSearch").disabled = !v || url;
+  }
+  $("btnCrawl").onclick=()=>{ const u=$("crawlUrl").value.trim(); if(!u){ $("crawlStatus").textContent="请输入链接或关键词"; return; } if(!isUrl(u)){ $("crawlStatus").textContent="输入的是文字，请用「知乎搜索」"; return; } crawl(u); };
+  async function zhRun(path,title){
+    const st=$("crawlStatus"); st.innerHTML='<span class="dshell-badge dshell-badgeWait">获取中</span> 知乎…';
+    try{
+      const r=await fetch("http://127.0.0.1:3921"+path);
+      const j=await r.json();
+      if(!j || !j.ok) throw new Error((j&&j.error)||"失败");
+      $("mdContent").value=j.text||""; $("docTitle").value=j.title||title||"知乎";
+      st.innerHTML='<span class="dshell-badge dshell-badgeDone">完成</span> '+((j.text||'').length)+' 字符';
+      renderMarkdown(); setMode("preview");
+    }catch(e){ st.innerHTML='<span class="dshell-badge">失败</span> '+(e.message||e)+'（需 zhihu-cli 与凭证、桥接 3921 在运行）'; }
+  }
+  $("btnClearCrawl").onclick=()=>{ $("crawlUrl").value=""; $("mdContent").value=""; $("docTitle").value=""; $("crawlStatus").textContent=""; $("mdPreview").innerHTML=""; setMode("source"); refreshMode(); };
+  $("crawlUrl").addEventListener("input",refreshMode);
+  $("crawlUrl").addEventListener("keydown",e=>{ if(e.key!=="Enter") return; const v=$("crawlUrl").value.trim(); if(!v){ $("btnZhHot").click(); } else if(isUrl(v)){ $("btnCrawl").click(); } else { $("btnZhSearch").click(); } });
+  $("btnModeSrc").onclick=()=>setMode("source");
+  $("btnModePrev").onclick=()=>setMode("preview");
+  $("btnZhSearch").onclick=()=>{ const q=$("crawlUrl").value.trim(); if(!q||isUrl(q)) return; zhRun("/search?q="+encodeURIComponent(q)+"&count=8","知乎搜索："+q); };
+  $("btnZhHot").onclick=()=>zhRun("/hot?limit=15","知乎热榜");
+  refreshMode();
+  function navShow(which){
+    document.querySelectorAll("#navMode .sy-modeBtn").forEach(b=>b.classList.toggle("sy-modeOn", b.dataset.nav===which));
+    $("tab-crawl").hidden = (which!=="crawl");
+    $("tab-dl").hidden = (which!=="dl");
+  }
+  $("navCrawl").onclick=()=>navShow("crawl");
+  $("navDl").onclick=()=>navShow("dl");
+  const DL_SRC={
+    cnki:{port:3922,name:"知网",kind:"pages",label:"知网搜索关键词，如：连续体机器人",dir:"D:/cnki_pdfs",note:"知网逐页下载 PDF（存到 D:/cnki_pdfs/关键词/）。若弹出浏览器验证码，请手动完成。"},
+    scholar:{port:3923,name:"谷歌学术",kind:"pages",label:"谷歌学术关键词/期刊，如：soft robotics",dir:"D:/scholar_pdfs",note:"谷歌学术逐篇找 PDF（存到 D:/scholar_pdfs/关键词/）。会弹出系统浏览器过验证，第一次可能在 Cloudflare 等约 20-30 秒或需手动点一下验证码。"},
+    link:{port:3924,name:"单篇",kind:"link",label:"粘贴论文 PDF 链接或 DOI 页（如 /doi/pdf/、/doi/abs/…）",dir:"D:/scholar_pdfs",note:"单篇下载（存到所选目录）。平时在后台最小化运行，仅在需要真人验证时弹出窗口。仅开放获取或有权限的能下到。"}
+  };
+  let dlSrc="cnki";
+  function dlApplySrc(){
+    const c=DL_SRC[dlSrc];
+    $("dlKw").placeholder=c.label;
+    $("dlDir").value=c.dir;
+    $("dlLog").textContent=c.note;
+    const isLink=c.kind==="link";
+    $("dlFrom").style.display = isLink?"none":"";
+    $("dlTo").style.display = isLink?"none":"";
+    $("dlPageSep").style.display = isLink?"none":"";
+    if(isLink && !/^https?:\/\//i.test($("dlKw").value.trim())){ $("dlKw").value=""; }
+    $("dlStatus").textContent="";
+    const dm=$("dlManual"); if(dm){ dm.style.display="none"; dm.innerHTML=""; }
+  }
+  document.querySelectorAll("#dlSrcSeg .sy-modeBtn").forEach(b=>{
+    b.onclick=()=>{
+      dlSrc=b.dataset.dlsrc;
+      document.querySelectorAll("#dlSrcSeg .sy-modeBtn").forEach(x=>x.classList.toggle("sy-modeOn",x===b));
+      dlApplySrc();
+    };
+  });
+  async function runDl(){
+    const kw=$("dlKw").value.trim(); if(!kw){ $("dlStatus").textContent=dlSrc==="link"?"请粘贴论文链接":"请输入关键词"; return; }
+    const f=parseInt($("dlFrom").value)||1, t=Math.max(f,parseInt($("dlTo").value)||f);
+    const src=DL_SRC[dlSrc]||DL_SRC.cnki;
+    const dir=($("dlDir").value||src.dir).trim()||src.dir;
+    const btn=$("btnDl"), log=$("dlLog"), st=$("dlStatus");
+    btn.disabled=true; log.textContent=""; st.textContent="提交任务…";
+    const dm0=$("dlManual"); if(dm0){ dm0.style.display="none"; dm0.innerHTML=""; }
+    const isLink=src.kind==="link";
+    const payload=isLink?{url:kw,dir:dir}:{keyword:kw,from:f,to:t,dir:dir};
+    try{
+      const r0=await fetch("http://127.0.0.1:"+src.port+"/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const j0=await r0.json();
+      if(!j0 || !j0.ok) throw new Error((j0&&j0.error)||("HTTP "+r0.status));
+      const jid=j0.job; let after=0;
+      st.textContent=src.name+"任务进行中（后台最小化运行）…";
+      for(;;){
+        await new Promise(res=>setTimeout(res,1500));
+        const rs=await fetch("http://127.0.0.1:"+src.port+"/status?job="+encodeURIComponent(jid)+"&after="+after);
+        const js=await rs.json();
+        if(js.log) log.textContent += js.log;
+        after=js.after||after;
+        if(js.done){
+          if(js.ok){
+            const files=js.files||[];
+            const manual=js.manual||[];
+            let s=log.textContent.replace(/\n{3,}/g,"\n\n").replace(/\s+$/,"");
+            if(files.length){ s+="\n\n== 已下载 "+files.length+" 个文件 → "+js.dir+" ==\n"; files.forEach(x=>{ const nm=x.split(/[\\/]/).pop(); s+="· "+nm+"\n   "+(x.split(/[\\/]/).slice(0,-1).join("/"))+"\n"; }); }
+            log.textContent=s;
+            // 需手动的做成可点击链接清单，方便你复制/打开后续下载
+            const dm=$("dlManual");
+            if(manual.length){
+              dm.style.display="block";
+              const note=js.manual_note?('<span style="color:#c0392b">'+js.manual_note+'</span><br>'):'';
+              dm.innerHTML=note+'<b style="color:#8a4b12">需手动下载 '+manual.length+' 篇（未能自动获取），点链接可打开：</b><br>'
+                +manual.map((u,i)=>'<span style="color:#5d584e">['+(i+1)+']</span> <a href="'+u+'" target="_blank" rel="noopener" style="color:#1B365D;word-break:break-all">'+u+'</a>').join('<br>');
+            } else { dm.style.display="none"; dm.innerHTML=""; }
+            st.textContent="完成 → 已下 "+files.length+" 篇"+(manual.length?("，需手动 "+manual.length+" 篇"):"");
+          } else throw new Error(js.error||"任务失败");
+          break;
+        }
+      }
+    }catch(e){ log.textContent+="\n失败："+(e.message||e)+"\n"; st.textContent="下载失败："+(e.message||e); }
+    finally{ btn.disabled=false; }
+  }
+  $("btnDl").onclick=runDl;
+  $("dlKw").addEventListener("keydown",e=>{ if(e.key==="Enter") runDl(); });
+  $("btnSaveCnz").onclick=saveCnz;
+
+  $("saveWorkspace").onchange=()=>{ state.workspace=WORKS[+$("saveWorkspace").value]; renderWorkspaces(); syncWsEndpoint(); if(state.connected){ state.connected=false; testConn(); } };
+  $("saveNotebookSel").onchange=onNotebookChange;
+  $("btnReloadNb").onclick=loadNotebooks;
+  $("btnLocUp").onclick=upLoc;
+  $("btnLocRoot").onclick=rootLoc;
+  $("btnGenCmd").onclick=async()=>{ log($("saveLog"),"生成终端命令…"); await genSaveCommand(); log($("saveLog"),"命令已生成，复制后到终端运行"); };
+  $("btnCopyCmd").onclick=()=>{ copyText($("cmdOut").textContent).then(()=>flash($("btnCopyCmd"))); };
+  $("btnCopyMd").onclick=()=>{ copyText($("mdContent").value).then(()=>flash($("btnCopyMd"))); };
+  $("btnDirect").onclick=async()=>{
+    const lg=$("saveLog"); log(lg,"正在保存到思源…");
+    try{
+      const r=await directSave();
+      log(lg,"保存成功 → 笔记本 "+r.nbId+"，位置 "+r.path+"，标题「"+r.title+"」，文档 "+r.docId);
+      $("saveModeBadge").className="dshell-badge dshell-badgeDone"; $("saveModeBadge").textContent="已保存";
+    }catch(e){
+      log(lg,"保存失败："+(e.message||e));
+      $("saveModeBadge").className="dshell-badge"; $("saveModeBadge").textContent="保存失败";
+    }
+  };
+
+  $("btnTestConn").onclick=testConn;
+  $("btnSaveSettings").onclick=saveSettings;
+
+  loadSettings();
+  renderCmdLib();
+  loadCjNb();
+  testConn(); // 打开时自动尝试直连，以拉取笔记本供保存使用
+})();
+</script>
+<style>
+  /* 透明：这个页面嵌在侧边栏的 iframe 里，要透出背后的桌面。
+     底色交给外层侧边栏的玻璃层，这里只保留文字与控件的颜色。 */
+  html, body { background:transparent !important; color:#23211d !important; }
+  #connBadge { display:none !important; }
+  .sy-head { display:none !important; }
+  .sy { background:transparent !important;
+    color:#23211d; }
+  .dshell-title { color:#1B365D; }
+  .dshell-sub { color:#1B365D; }
+  .dshell-tabs { background:#f1eddf; }
+  .dshell-tab { color:#8a847a !important; background:transparent !important; }
+  .dshell-tab:hover { color:#1B365D !important; }
+  .dshell-tab.dshell-tabOn { color:#1B365D !important; border-bottom-color:#1B365D !important; background:transparent !important; }
+  .dshell-btn { color:#1B365D !important; background:#fffdf7 !important; border:1px solid #c9c2b0 !important; box-shadow:none !important; }
+  .dshell-btn:hover { border-color:#1B365D !important; }
+  .dshell-btnGhost { color:#1B365D !important; background:#fffdf7 !important; border:1px solid #c9c2b0 !important; }
+  .dshell-btnDanger { color:#c0392b !important; border:1px solid #e0b8ad !important; background:#fff !important; }
+  .dshell-input, .dshell-textarea, textarea.sy-textarea, select.dshell-input, input.dshell-input {
+    background:#fff !important; color:#23211d !important; border-color:#cfc7b4 !important; }
+  select.dshell-input option { background:#fff; color:#23211d; }
+  .dshell-card { background:#fffdf7 !important; border:1px solid #e2dccb !important; color:#23211d !important; }
+  .dshell-badge { color:#5f5a51; background:#f1ecdf; border:1px solid #d8d0bf; }
+  .dshell-badgeDone { color:#2e7d4f !important; background:#e5f2e8 !important; border-color:#9fd0ae !important; }
+  .dshell-badgeWait { color:#8a6d1f !important; background:#f7eecf !important; border-color:#e3ce8a !important; }
+  .sy-box, .sy-term, .sy-log, .sy-cmd { background:#fffdf7 !important; border:1px solid #e2dccb !important; color:#2b2822 !important; }
+  .sy-label { color:#5d584e; }
+  .sy-note { color:#6f6a60; }
+  .sy-page { color:#23211d; }
+  .dshell-kvKey, .dshell-card label { color:#5d584e !important; }
+  .dshell-kvValue { color:#1c1a16 !important; }
+  .dshell-sub, .dshell-title, .sy-card h2 { color:#1B365D !important; }
+  a { color:#1B365D; }
+  .sy-term, .sy-log, .sy-cmd, textarea, input, select { color:#1c1a16; }
+  .sy-mode { display:inline-flex; border:1px solid #c9c2b0; border-radius:7px; overflow:hidden; }
+  .sy-modeBtn { border:0; background:#fffdf7; color:#6f6a60; padding:2px 14px; font-size:12px; cursor:pointer; }
+  .sy-modeBtn:hover { color:#1B365D; }
+  .sy-modeBtn.sy-modeOn { background:#1B365D; color:#fff; }
+  .sy-view { width:100%; box-sizing:border-box; }
+  #mdPreview { padding:8px 10px; line-height:1.7; }
+  #mdPreview h1, #mdPreview h2, #mdPreview h3 { color:#1B365D; margin:.3em 0 .2em; }
+  #mdPreview h1 { font-size:20px; } #mdPreview h2 { font-size:17px; } #mdPreview h3 { font-size:14px; }
+  #mdPreview a { color:#1B365D; }
+  #mdPreview .sy-mdli { margin:2px 0; }
+  .sy-mdpre { background:#f1ede2; padding:8px; border-radius:6px; white-space:pre-wrap; font-size:12px; font-family:monospace; color:#3a352c; }
+  .sy-mdcode { background:#f1ede2; padding:0 3px; border-radius:4px; color:#8a1f1f; font-family:monospace; }
+  /* 聚焦正文：压缩顶部，正文占满，预览图片自适应 */
+  #tab-crawl .sy-row { margin:2px 0; }
+  #tab-crawl input, #tab-crawl .dshell-input { padding:3px 8px; font-size:12.5px; }
+  #tab-crawl .sy-label { margin:0; }
+  #tab-crawl .sy-box { flex:1 1 0; min-height:0; }
+  #tab-crawl .sy-textarea, #tab-crawl #mdPreview { flex:1 1 0; min-height:0; }
+  .sy-img { display:block; max-width:100%; height:auto; border-radius:6px; margin:6px auto; }
+</style>
+</body>
+</html>

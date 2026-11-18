@@ -1,0 +1,43 @@
+# ---------- 构建产物 ----------
+/src-tauri/target/
+/target/
+/dist/
+/build/
+*.exe
+*.msi
+*.pdb
+*.dSYM/
+
+# ---------- 依赖 ----------
+node_modules/
+/venv/
+__pycache__/
+*.py[cod]
+
+# ---------- Tauri 自动生成 ----------
+/src-tauri/gen/schemas/
+
+# ---------- 本地配置（含 token，绝不入库）----------
+services/regen-config.json
+services/capacity.json
+*.local.json
+.env
+.env.*
+
+# ---------- 日志与临时文件 ----------
+*.log
+logs-*.log
+*.tmp
+*.bak
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- 测试产物 ----------
+/tmp/
+/screenshots/
