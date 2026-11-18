@@ -1196,15 +1196,23 @@
     if (pomoPrepSide && pomoPrepSide.ti === di && pomoPrepSide.si === si) {
       var _mins0 = Number(t.mins) || 25;
       var _n0 = Math.max(1, (t.subs || []).length);
-      var _def0 = Math.max(5, Math.round(_mins0 / _n0 / 5) * 5);
+      /* 默认时长 = 任务时长 ÷ 步骤数，按 5 分钟取整，夹在 5~90 之间。
+         ⚠ 以前没有上限：任务 100 分钟 / 1 步 = 100 分钟，
+         一个番茄 100 分钟太长了，用户想改还得手动输入。 */
+      var _def0 = Math.max(5, Math.min(90, Math.round(_mins0 / _n0 / 5) * 5));
+      /* 用户改过的值优先。以前只用 pomoPrepSide.min，
+         而它只在初始化时写过一次 —— 用户在输入框里改的值
+         一旦遇到重绘就被 _def0 冲掉，表现就是「改不了时间」。 */
+      var _cur0 = (pomoPrepSide.min != null && Number(pomoPrepSide.min) > 0)
+        ? Number(pomoPrepSide.min) : _def0;
       /* 顺序：时长（左）→ 说明（中间，占满）→ 开始/取消（右）。
          说明框默认带上「这一步的标题」，可以直接改写成做了什么。 */
       var _note0 = (pomoPrepSide.note != null)
         ? pomoPrepSide.note
         : String(x.text || "");
       _prepHtml = '<li class="stepPrep" data-prep-ti="' + di + '" data-prep-si="' + si + '"'
-        + ' data-prep-min="' + _def0 + '">'
-        + '<input class="stepPrepMin" type="number" min="1" step="1" value="' + (pomoPrepSide.min || _def0) + '" title="分钟数">'
+        + ' data-prep-min="' + _cur0 + '">'
+        + '<input class="stepPrepMin" type="number" min="1" max="600" step="1" value="' + _cur0 + '" title="分钟数">'
         + '<span class="stepPrepUnit">分</span>'
         + '<input class="stepPrepNote" placeholder="这一步在做什么…" value="' + esc(_note0) + '" title="记录这一步具体做了什么">'
         + '<button class="stepPrepGo" title="开始倒计时（回车也可以）">开始</button>'
@@ -1283,6 +1291,19 @@
       var el = document.querySelector("." + c);
       if (el) out.vals[c] = el.value;
     });
+    /* ⚠ 把预备框里改过的「分钟数 / 说明」写回 pomoPrepSide。
+       准备工作面板是靠 renderTodos 重画的，模板里用的值来自 pomoPrepSide。
+       不在重绘前同步的话，用户改完 45 分、任何一次重绘都会把它冲回默认值，
+       表现就是「时间改不了」。 */
+    if (pomoPrepSide) {
+      var mi2 = document.querySelector(".stepPrepMin");
+      var nt2 = document.querySelector(".stepPrepNote");
+      if (mi2) {
+        var mv = Math.round(Number(mi2.value) || 0);
+        if (mv > 0) pomoPrepSide.min = mv;
+      }
+      if (nt2) pomoPrepSide.note = String(nt2.value || "");
+    }
     /* 正在双击编辑的文字块也记下来 */
     var ce = document.querySelector('[contenteditable="true"]');
     if (ce) {
@@ -2550,10 +2571,23 @@
   /* 进度滑块拖动时实时更新旁边的百分比 */
   document.addEventListener("input", function(e){
     var t0 = e.target;
-    if (!t0 || !t0.classList || !t0.classList.contains("stepPctRange")) return;
-    var box = t0.closest(".stepPctBox");
-    var val = box ? box.querySelector(".stepPctVal") : null;
-    if (val) val.textContent = (Number(t0.value) || 0) + "%";
+    if (!t0 || !t0.classList) return;
+    if (t0.classList.contains("stepPctRange")) {
+      var box = t0.closest(".stepPctBox");
+      var val = box ? box.querySelector(".stepPctVal") : null;
+      if (val) val.textContent = (Number(t0.value) || 0) + "%";
+      return;
+    }
+    /* 预备框：用户一改就把值存进 pomoPrepSide，
+       这样即使中途发生重绘，改过的时长/说明也不会被默认值冲掉。 */
+    if (pomoPrepSide && (t0.classList.contains("stepPrepMin") || t0.classList.contains("stepPrepNote"))) {
+      if (t0.classList.contains("stepPrepMin")) {
+        var mv = Math.round(Number(t0.value) || 0);
+        if (mv > 0) pomoPrepSide.min = mv;
+      } else {
+        pomoPrepSide.note = String(t0.value || "");
+      }
+    }
   }, true);
 
   var clickTimer = null;
@@ -2973,6 +3007,20 @@
   function todoHint(msg, color){
     var el = $("todoHint");
     if (!el) return;
+    /* ⚠ 刚点了「开始」时，后台推送完成会紧跟着弹「已推送 N 个项目」，
+       把「开始：45 分钟 · xxx」这条更重要的提示盖掉 ——
+       用户看到的就是「点了开始没反应」。
+       这里给「开始」类提示留 6 秒的保护期，期间推送类提示不抢位。 */
+    try {
+      var now = Date.now();
+      if (window.__hintGuardUntil && now < window.__hintGuardUntil
+          && /已推送|已拉取|已合并/.test(String(msg || ""))) {
+        return;
+      }
+      if (/^开始/.test(String(msg || ""))) {
+        window.__hintGuardUntil = now + 6000;
+      }
+    } catch(e){}
     el.textContent = msg || "";
     el.style.color = color || "#8b4513";
     /* 回写主界面状态栏，两边看到同一个结果 */
@@ -5750,7 +5798,9 @@
 
     var mins = Number(t.mins) || 25;
     var n = Math.max(1, (t.subs || []).length);
-    var stepMins = Math.max(5, Math.round(mins / n / 5) * 5);
+    /* 默认单步时长：任务时长 ÷ 步骤数，5 分钟取整，夹在 5~90。
+       和 taskHtml 里的 _def0 保持同一套算法，避免开框和渲染不一致。 */
+    var stepMins = Math.max(5, Math.min(90, Math.round(mins / n / 5) * 5));
 
     pomoPrepSide = { ti: ti, si: si, min: stepMins };
     try { renderTodos(); } catch(e){}

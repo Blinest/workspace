@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.0.2 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.0.3 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1467,7 +1467,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.2</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.3</span>
   </div>
 </div>
 
@@ -2683,6 +2683,37 @@ window.addEventListener("storage", function(ev){
             const ib = order[String(b.text || "").trim()];
             return (ia == null ? 1e9 : ia) - (ib == null ? 1e9 : ib);
           });
+
+          /* ⚠ 光同步「步骤增删」不够 —— 侧边栏改进度（pct）、勾选、
+             补番茄记录时，任务集合和步骤集合都没变，只是字段值变了。
+             以前这里只数 touchedSubs，字段变化一概不处理，
+             表现就是「侧边栏设了步骤百分比，主界面不动」。
+             这里按步骤文字逐项对齐字段，有变化就置 touchedSubs。 */
+          const byText = {};
+          it.subs.forEach(function(ns){ if (ns && ns.text) byText[String(ns.text).trim()] = ns; });
+          (d.subs || []).forEach(function(s){
+            const ns = byText[String((s && s.text) || "").trim()];
+            if (!ns) return;
+            /* 进度：已勾选就是 100 */
+            const wantPct = ns.done ? 100 : (Number(ns.pct) || 0);
+            if ((Number(s.pct) || 0) !== wantPct) { s.pct = wantPct; touchedSubs++; }
+            if (!!s.done !== !!ns.done) { s.done = !!ns.done; touchedSubs++; }
+            if ((s.doneAt || null) !== (ns.doneAt || null)) { s.doneAt = ns.doneAt || null; touchedSubs++; }
+            if (ns.date && s.date !== ns.date) { s.date = ns.date; touchedSubs++; }
+            if (Array.isArray(ns.dates) && ns.dates.length) { s.dates = ns.dates.slice(); touchedSubs++; }
+            /* pctHist 也要同步：否则内存旧副本下次写回会把历史冲掉 */
+            const nh = JSON.stringify(ns.pctHist || null);
+            const sh = JSON.stringify(s.pctHist || null);
+            if (nh !== sh) {
+              if (Array.isArray(ns.pctHist) && ns.pctHist.length) s.pctHist = ns.pctHist.slice();
+              else delete s.pctHist;
+              touchedSubs++;
+            }
+          });
+          /* 番茄记录也可能被侧边栏补进来 */
+          const nl = JSON.stringify((it.logs || []).length);
+          const dl = JSON.stringify((d.logs || []).length);
+          if (nl !== dl) { d.logs = (it.logs || []).slice(); touchedSubs++; }
         });
         if (touchedSubs) { try { W(); } catch(eSW){} }
         return;
