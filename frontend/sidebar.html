@@ -664,6 +664,44 @@
   .stepPctOk:hover{ background:#f6e2a8; }
   .stepPctCancel{ flex:none; padding:1px 6px; border:1px solid #d8d2c4; background:#fffdf7;
     color:#8a8579; border-radius:4px; font:10.5px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  /* 补录番茄面板（点步骤行的 ＋ 出现） */
+  li.retroBox{ display:flex; align-items:center; gap:4.5px; margin:2px 0 4px 14px;
+    padding:4px 7px; border:1px solid #e0cfa0; background:#fffbe9; border-radius:5px; }
+  .retroLbl{ flex:none; font-size:10px; color:#8a6d2f; }
+  .retroMin{ flex:none; width:42px; box-sizing:border-box; padding:0.9px 3.8px;
+    border:0.9px solid #e2d5b0; border-radius:4px; font:11px/1.5 inherit; font-family:inherit;
+    background:#fffefb; color:#35322c; text-align:center; }
+  .retroMin:focus{ outline:none; border-color:#d9822b; }
+  .retroUnit{ flex:none; font-size:9.5px; color:#7a6f5c; }
+  .retroNote{ flex:1 1 auto; min-width:0; box-sizing:border-box; padding:0.9px 4.8px;
+    border:0.9px solid #e2d5b0; border-radius:4px; font:11px/1.5 inherit; font-family:inherit;
+    background:#fffefb; color:#35322c; }
+  .retroNote:focus{ outline:none; border-color:#d9822b; }
+  .retroOk{ flex:none; padding:0.9px 8.5px; border:0.9px solid #d9a015; background:#fbeec4;
+    color:#8a6d2f; border-radius:4px; font:10.5px/1.6 inherit; font-family:inherit;
+    font-weight:600; cursor:pointer; }
+  .retroOk:hover{ background:#f6e2a8; }
+  .retroCancel{ flex:none; padding:0.9px 5.7px; border:0.9px solid #d8d2c4; background:#fffdf7;
+    color:#9a9384; border-radius:4px; font:10.5px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  .retroCancel:hover{ background:#f4efe4; }
+
+  /* 列表底部「新增步骤」入口 */
+  .subAddRow{ margin:4px 0 2px 14px; }
+  .subAddBtn{ width:100%; padding:3px 8px; border:1px dashed #d8d0bd; background:transparent;
+    color:#7a9a6a; border-radius:5px; font:10.5px/1.6 inherit; font-family:inherit;
+    cursor:pointer; opacity:.55; transition:opacity .12s, background .12s; }
+  .subAddBtn:hover{ opacity:1; background:#f4f8f2; }
+  .subAddBox{ display:flex; align-items:center; gap:4.5px; margin:4px 0 2px 14px; }
+  .subAddIn{ flex:1 1 auto; min-width:0; box-sizing:border-box; padding:2px 6px;
+    border:0.9px solid #cfe0c6; border-radius:4px; font:11.5px/1.5 inherit; font-family:inherit;
+    background:#fffefb; color:#35322c; }
+  .subAddIn:focus{ outline:none; border-color:#2f7a4f; }
+  .subAddOk{ flex:none; padding:1.5px 9px; border:0.9px solid #7a9a6a; background:#eef6e8;
+    color:#2f7a4f; border-radius:4px; font:10.5px/1.6 inherit; font-family:inherit;
+    font-weight:600; cursor:pointer; }
+  .subAddCancel{ flex:none; padding:1.5px 6px; border:0.9px solid #d8d2c4; background:#fffdf7;
+    color:#9a9384; border-radius:4px; font:10.5px/1.6 inherit; font-family:inherit; cursor:pointer; }
+
   /* 插入新步骤的输入行 */
   li.stepInsBox{ display:flex; align-items:center; gap:4px; margin:2px 0 4px 14px;
     padding:3px 5px; border:1px solid #d8d0bd; background:#fffefb; border-radius:5px; }
@@ -1448,6 +1486,14 @@
      否则 taskHtml 里读它会撞 TDZ，整个列表画不出来。 */
   var stepInsFor = null;
 
+  /* 正在「补录番茄」的那一步，值是 "ti:si"。
+     点步骤行里的 ＋ 打开，填分钟数和说明后保存。
+     和主界面步骤级番茄的补录逻辑一致。 */
+  var retroFor = null;
+
+  /* 正在列表底部「新增步骤」的任务（真实下标）。null = 没在加。 */
+  var subAddFor = null;
+
   /* 正在调进度的那一步，值是 "ti:si"。同样是状态驱动，
      必须声明在 taskHtml 之前（否则 TDZ，整个列表画不出来）。 */
   var stepPctFor = null;
@@ -1529,7 +1575,7 @@
                + badge
                + pctBadge
                + '<button class="stepPomo" data-act="steplog" data-ti="' + di + '" data-fi="' + ti + '" data-si="' + si + '" title="给这一步记一个番茄">🍅</button>'
-               + '<button class="stepIns" data-step-ins="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="在这一步后面插入新步骤">＋</button>'
+               + '<button class="stepIns" data-retro="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="补录一个番茄（已经做完的计时）">＋</button>'
                + '<button class="stepDel" data-step-del="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="删除这一步">✕</button>'
                + '</li>'
                /* 进度调节条（点百分比后出现） */
@@ -1543,11 +1589,15 @@
                      + '</li>'
                    : '')
                /* 插入新步骤的输入框（插在这一行后面） */
-               + (stepInsFor === (di + ':' + si)
-                   ? '<li class="stepInsBox" data-ins-ti="' + di + '" data-ins-si="' + si + '">'
-                     + '<input class="stepInsIn" placeholder="新步骤内容，回车添加…">'
-                     + '<button class="stepInsOk" data-ins-ok="' + di + ':' + si + '">加</button>'
-                     + '<button class="stepInsCancel" data-ins-cancel="1">✕</button>'
+               /* 补录番茄面板（点 ＋ 出现） */
+               + (retroFor === (di + ':' + si)
+                   ? '<li class="retroBox" data-retro-ti="' + di + '" data-retro-si="' + si + '">'
+                     + '<span class="retroLbl">补录</span>'
+                     + '<input class="retroMin" type="number" min="1" max="600" step="5" value="25" title="这个番茄多少分钟">'
+                     + '<span class="retroUnit">分钟</span>'
+                     + '<input class="retroNote" placeholder="做了什么…" title="这一步具体做了什么">'
+                     + '<button class="retroOk" data-retro-ok="' + di + ':' + si + '">保存</button>'
+                     + '<button class="retroCancel" data-retro-cancel="1">✕</button>'
                      + '</li>'
                    : '')
                /* 设时长的预备框（如果这一行正在设） */
@@ -1555,6 +1605,13 @@
                /* 这一步自己的番茄记录，紧贴在这一步下面 */
                + (mine.length ? '<li class="stepLogs">' + mine.map(function(o){ return logLineHtml(o.l, di, o.li, si); }).join("") + '</li>' : '');
         }).join("")
+      + (subAddFor === di
+          ? '<li class="subAddBox" data-subadd-ti="' + di + '">'
+            + '<input class="subAddIn" placeholder="新步骤内容，回车添加…">'
+            + '<button class="subAddOk" data-subadd-ok="' + di + '">加</button>'
+            + '<button class="subAddCancel" data-subadd-cancel="1">✕</button>'
+            + '</li>'
+          : '<li class="subAddRow"><button class="subAddBtn" data-subadd="' + di + '">＋ 新增步骤</button></li>')
       + '</ul>'
       + (loose.length ? loose.map(function(o){ return logLineHtml(o.l, di, o.li, null); }).join("") : "")
       + notes.map(function(n, ni){
@@ -1573,7 +1630,7 @@
     var act = document.activeElement;
     var out = { focusClass: null, focusSel: null, vals: {}, editSpec: null, editText: null };
     if (act && act.classList) {
-      ["stepInsIn", "stepPctRange", "stepPrepMin", "stepPrepNote"].forEach(function(c){
+      ["stepInsIn", "stepPctRange", "stepPrepMin", "stepPrepNote", "retroMin", "retroNote", "subAddIn"].forEach(function(c){
         if (act.classList.contains(c)) {
           out.focusClass = c;
           try { out.focusSel = [act.selectionStart, act.selectionEnd]; } catch(e){}
@@ -2892,6 +2949,120 @@
   }
 
   /* 在指定步骤后面插入一个新步骤 */
+  /* ================= 补录番茄 =================
+     点步骤行的 ＋ 打开面板，填分钟数 + 说明后保存。
+     和主界面步骤级番茄的补录逻辑一致：往这一步下面记一条
+     「🍅N分, 时间区间 说明」，并把这一步标成已做。
+
+     ti 是真实下标（data-ti），si 是步骤序。 */
+  function commitRetroPomo(ti, si, mins, note){
+    var m = Math.round(Number(mins) || 0);
+    if (!(m > 0)) return;
+    m = Math.max(1, Math.min(600, m));
+
+    var raw = readSnapshot();
+    if (!raw || !raw.items) return;
+
+    /* 真实下标 → 数组位置 */
+    var fi = -1;
+    for (var k = 0; k < raw.items.length; k++) {
+      if (raw.items[k] && raw.items[k].__oi === ti) { fi = k; break; }
+    }
+    if (fi < 0 && raw.items[ti]) fi = ti;
+    if (fi < 0) return;
+
+    var t = raw.items[fi];
+    var sb = (t.subs || [])[si];
+    if (!sb) return;
+
+    var now = new Date();
+    var start = new Date(now.getTime() - m * 60000);
+    var txt = String(note || "").trim();
+    /* 说明留空时用步骤名兜底，别记成一条没有上下文的空番茄 */
+    if (!txt) txt = String(sb.text || "").trim();
+
+    t.logs = t.logs || [];
+    t.logs.push({
+      min: m,
+      start: fmtDT(start),
+      end: fmtDT(now),
+      text: txt,
+      si: si,
+      local: true
+    });
+
+    /* 记录番茄即视为这一步做了 */
+    if (!sb.done) {
+      sb.done = true;
+      sb.doneAt = todayStr();
+      sb.pct = 100;
+      try { recordDelta(t.name, si, true); } catch(e){}
+    }
+
+    raw.at = Date.now();
+    raw.dirty = 0;
+    raw.forcePush = Date.now();
+    try { localStorage.setItem(TODOS_KEY, JSON.stringify(raw)); } catch(e){}
+
+    retroFor = null;
+    try { renderTodos(true); } catch(e){}
+    todoHint("已补录番茄：" + m + " 分钟 · " + txt.slice(0, 16), "#2f7a4f");
+    try { scheduleSync(); } catch(e){}
+    /* 浮层跟着刷新 */
+    if (typeof curCard !== "undefined" && curCard) {
+      try {
+        invokeP("preview_update", {
+          html: grabHtml(curCard) || "",
+          title: cardTitle(curCard)
+        }).catch(function(){});
+      } catch(e){}
+    }
+  }
+
+  /* ================= 列表底部新增步骤 =================
+     ti 是任务的真实下标。空内容不添加。 */
+  function commitAddStep(ti, text){
+    var txt = String(text || "").trim();
+    if (!txt) {
+      var inp = document.querySelector('.subAddIn');
+      if (inp) { try { inp.focus(); } catch(e){} }
+      return;
+    }
+
+    var raw = readSnapshot();
+    if (!raw || !raw.items) return;
+
+    var fi = -1;
+    for (var k = 0; k < raw.items.length; k++) {
+      if (raw.items[k] && raw.items[k].__oi === ti) { fi = k; break; }
+    }
+    if (fi < 0 && raw.items[ti]) fi = ti;
+    if (fi < 0) return;
+
+    var t = raw.items[fi];
+    t.subs = t.subs || [];
+    t.subs.push({ text: txt, done: false });
+
+    raw.at = Date.now();
+    raw.dirty = 0;
+    raw.forcePush = Date.now();
+    try { localStorage.setItem(TODOS_KEY, JSON.stringify(raw)); } catch(e){}
+
+    /* 留着输入框打开，方便连续加好几条 */
+    try { renderTodos(true); } catch(e){}
+    var again = document.querySelector('.subAddIn');
+    if (again) { try { again.focus(); } catch(e){} }
+    try { scheduleSync(); } catch(e){}
+    if (typeof curCard !== "undefined" && curCard) {
+      try {
+        invokeP("preview_update", {
+          html: grabHtml(curCard) || "",
+          title: cardTitle(curCard)
+        }).catch(function(){});
+      } catch(e){}
+    }
+  }
+
   function commitInsertStep(ti, si, text){
     var t0 = String(text || "").trim();
     if (!t0) {
@@ -3113,6 +3284,28 @@
     }
     /* 预备框：用户一改就把值存进 pomoPrepSide，
        这样即使中途发生重绘，改过的时长/说明也不会被默认值冲掉。 */
+    /* 补录番茄：回车保存 */
+    if (retroFor && (t0.classList.contains("retroMin") || t0.classList.contains("retroNote"))) {
+      ev.preventDefault();
+      var rbx = t0.closest(".retroBox");
+      if (rbx) {
+        var rk2 = rbx.getAttribute("data-retro-ti") + ":" + rbx.getAttribute("data-retro-si");
+        var rmi = rbx.querySelector(".retroMin");
+        var rnt = rbx.querySelector(".retroNote");
+        var rm2 = Math.round(Number(rmi ? rmi.value : 0) || 0);
+        if (rm2 > 0) commitRetroPomo(+rbx.getAttribute("data-retro-ti"), +rbx.getAttribute("data-retro-si"), rm2, rnt ? rnt.value : "");
+      }
+      return;
+    }
+    if (subAddFor != null && t0.classList.contains("subAddIn")) {
+      ev.preventDefault();
+      var sbx = t0.closest(".subAddBox");
+      if (sbx) {
+        commitAddStep(+sbx.getAttribute("data-subadd-ti"), t0.value);
+        t0.value = "";
+      }
+      return;
+    }
     if (pomoPrepSide && (t0.classList.contains("stepPrepMin") || t0.classList.contains("stepPrepNote"))) {
       if (t0.classList.contains("stepPrepMin")) {
         var mv = Math.round(Number(t0.value) || 0);
@@ -3154,28 +3347,67 @@
       if (el0.closest(".addTask")) { addTask(); return; }
 
       /* —— 步骤级：插入 / 删除 —— */
-      var insBtn = el0.closest("[data-step-ins]");
-      if (insBtn) {
+      /* —— 补录番茄：点步骤行的 ＋ —— */
+      var retroBtn = el0.closest("[data-retro]");
+      if (retroBtn) {
         ev.stopPropagation();
-        stepInsFor = String(insBtn.getAttribute("data-step-ins"));
+        var rk = String(retroBtn.getAttribute("data-retro"));
+        retroFor = (retroFor === rk) ? null : rk;
+        stepInsFor = null;
+        subAddFor = null;
         renderTodos(true);
-        var ii = document.querySelector('.stepInsIn');
-        if (ii) { try { ii.focus(); } catch(e){} }
+        if (retroFor) {
+          var rmin = document.querySelector('.retroBox .retroMin');
+          if (rmin) { try { rmin.focus(); rmin.select(); } catch(e){} }
+        }
         return;
       }
-      if (el0.closest("[data-ins-cancel]")) {
+      if (el0.closest("[data-retro-cancel]")) {
         ev.stopPropagation();
+        retroFor = null;
+        renderTodos(true);
+        return;
+      }
+      var retroOk = el0.closest("[data-retro-ok]");
+      if (retroOk) {
+        ev.stopPropagation();
+        var rbox = retroOk.closest('.retroBox');
+        var rminIn = rbox ? rbox.querySelector('.retroMin') : null;
+        var rnoteIn = rbox ? rbox.querySelector('.retroNote') : null;
+        var rspec = String(retroOk.getAttribute("data-retro-ok")).split(":");
+        var rMin = Math.round(Number(rminIn ? rminIn.value : 0) || 0);
+        if (!(rMin > 0)) { if (rminIn) { try { rminIn.focus(); rminIn.select(); } catch(e){} } return; }
+        commitRetroPomo(+rspec[0], +rspec[1], rMin, rnoteIn ? rnoteIn.value : "");
+        return;
+      }
+
+      /* —— 新增步骤：列表底部的入口 —— */
+      var subAddBtn = el0.closest("[data-subadd]");
+      if (subAddBtn) {
+        ev.stopPropagation();
+        var saTi = +subAddBtn.getAttribute("data-subadd");
+        subAddFor = (subAddFor === saTi) ? null : saTi;
+        retroFor = null;
         stepInsFor = null;
         renderTodos(true);
+        if (subAddFor != null) {
+          var sai = document.querySelector('.subAddIn');
+          if (sai) { try { sai.focus(); } catch(e){} }
+        }
         return;
       }
-      var insOk = el0.closest("[data-ins-ok]");
-      if (insOk) {
+      if (el0.closest("[data-subadd-cancel]")) {
         ev.stopPropagation();
-        var ibox = insOk.closest('.stepInsBox');
-        var iin = ibox ? ibox.querySelector('.stepInsIn') : null;
-        var spec = String(insOk.getAttribute("data-ins-ok")).split(":");
-        commitInsertStep(+spec[0], +spec[1], iin ? iin.value : "");
+        subAddFor = null;
+        renderTodos(true);
+        return;
+      }
+      var subAddOk = el0.closest("[data-subadd-ok]");
+      if (subAddOk) {
+        ev.stopPropagation();
+        var sbox = subAddOk.closest('.subAddBox');
+        var sin = sbox ? sbox.querySelector('.subAddIn') : null;
+        commitAddStep(+subAddOk.getAttribute("data-subadd-ok"), sin ? sin.value : "");
         return;
       }
       var delStep = el0.closest("[data-step-del]");
@@ -8074,6 +8306,55 @@
             var tE = raw.items[tiE];
             var sE = tE && (tE.subs || [])[siE];
             if (sE && d.text) { sE.text = String(d.text); changed = true; }
+          }
+
+          /* ---- 补录番茄：打开面板 ---- */
+          else if (kind === "retroOpen") {
+            var rkKey = String(d.key || "");
+            retroFor = (retroFor === rkKey) ? null : rkKey;
+            stepInsFor = null;
+            subAddFor = null;
+            try { renderTodos(true); } catch(e){}
+            if (curCard) {
+              try {
+                invokeP("preview_update", {
+                  html: grabHtml(curCard) || "",
+                  title: cardTitle(curCard)
+                }).catch(function(){});
+              } catch(eU){}
+            }
+            return;
+          }
+
+          /* ---- 补录番茄：保存 ---- */
+          else if (kind === "retroSave") {
+            var rk2 = String(d.key || "").split(":");
+            try { commitRetroPomo(+rk2[0], +rk2[1], +d.min, String(d.note || "")); } catch(eR){}
+            return;
+          }
+
+          /* ---- 新增步骤：打开输入框 ---- */
+          else if (kind === "subAddOpen") {
+            var saTi2 = +d.ti;
+            subAddFor = (subAddFor === saTi2) ? null : saTi2;
+            retroFor = null;
+            stepInsFor = null;
+            try { renderTodos(true); } catch(e){}
+            if (curCard) {
+              try {
+                invokeP("preview_update", {
+                  html: grabHtml(curCard) || "",
+                  title: cardTitle(curCard)
+                }).catch(function(){});
+              } catch(eU2){}
+            }
+            return;
+          }
+
+          /* ---- 新增步骤：保存 ---- */
+          else if (kind === "subAddSave") {
+            try { commitAddStep(+d.ti, String(d.text || "")); } catch(eS){}
+            return;
           }
 
           /* ---- 番茄预备面板：开始 ---- */

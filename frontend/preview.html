@@ -1122,6 +1122,48 @@
         return;
       }
 
+      /* 4.45 补录番茄 / 新增步骤 */
+      var retro = closestData(t, "data-retro");
+      if (retro) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("retroOpen", { key: retro.getAttribute("data-retro") });
+        return;
+      }
+      var retroOk2 = closestData(t, "data-retro-ok");
+      if (retroOk2) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var rbx2 = retroOk2.closest(".retroBox") || retroOk2.parentNode;
+        var rmi2 = rbx2 ? rbx2.querySelector(".retroMin") : null;
+        var rnt2 = rbx2 ? rbx2.querySelector(".retroNote") : null;
+        send("retroSave", {
+          key: retroOk2.getAttribute("data-retro-ok"),
+          min: rmi2 ? (Math.round(Number(rmi2.value) || 0)) : 25,
+          note: rnt2 ? String(rnt2.value || "") : ""
+        });
+        return;
+      }
+      var subAdd = closestData(t, "data-subadd");
+      if (subAdd) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("subAddOpen", { ti: subAdd.getAttribute("data-subadd") });
+        return;
+      }
+      var subAddOk2 = closestData(t, "data-subadd-ok");
+      if (subAddOk2) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var sbx2 = subAddOk2.closest(".subAddBox") || subAddOk2.parentNode;
+        var sin2 = sbx2 ? sbx2.querySelector(".subAddIn") : null;
+        send("subAddSave", {
+          ti: subAddOk2.getAttribute("data-subadd-ok"),
+          text: sin2 ? String(sin2.value || "") : ""
+        });
+        return;
+      }
+
       /* 4.5 插入步骤 / 删除步骤 / 番茄计时 */
       var ins = closestData(t, "data-step-ins");
       if (ins) {
