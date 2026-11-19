@@ -679,7 +679,6 @@
     } catch(e) { return Promise.reject(e); }
   }
 
-  /* 渲染。内容由 Rust 写进 preview-payload.json。 */
   function render(payload){
     try {
       var p = typeof payload === "string" ? JSON.parse(payload) : payload;
@@ -693,61 +692,132 @@
   }
 
   /* ================= 交互转发 =================
-     预览里的元素是**拷贝**过来的，绑在原节点上的监听器不会跟过来。
-     所以这里把点击/改动抓下来，转成一条消息发给侧边栏，
-     由侧边栏在真实的卡片上复现同一个动作 —— 数据改的是同一份。
+     预览里的 DOM 是**拷贝**，原来绑的监听器不会跟过来。
+     这里把点击/双击抓下来，原样发回侧边栏，由它在真实卡片上复现。
 
-     识别依据：侧边栏的按钮都带 data-act 和 data-ti / data-si。
+     侧边栏一共有这几类可交互元素（按属性区分）：
+       data-act        按钮动作（番茄记录等）
+       data-ti/data-si 点击切换步骤完成
+       data-star       切换重要性
+       data-deltask    删除任务
+       data-step-pct   设置步骤百分比（点了要弹输入框，见下）
+       data-edit       双击改任务名
+       data-edit-sub   双击改步骤名
      ============================================ */
 
-  function findAction(el){
-    while (el && el !== bodyEl) {
-      if (el.getAttribute && el.getAttribute("data-act")) return el;
+  /* 找到最近的、带指定 data 属性的祖先 */
+  function closestData(el, attr){
+    while (el && el !== bodyEl && el !== document.body) {
+      if (el.getAttribute && el.getAttribute(attr) != null) return el;
       el = el.parentNode;
     }
     return null;
+  }
+
+  function send(kind, data){
+    invoke("preview_action", { kind: kind, data: data }).catch(function(){});
   }
 
   function bindActions(){
     if (bodyEl.__bound) return;
     bodyEl.__bound = true;
 
-    /* 单击：把所有 data-* 属性一起带过去 */
+    /* ---------- 单击 ---------- */
     bodyEl.addEventListener("click", function(ev){
-      var act = findAction(ev.target);
-      if (!act) return;
-      ev.preventDefault();
-      ev.stopPropagation();
-      var data = {};
-      Array.prototype.forEach.call(act.attributes, function(a){
-        if (a.name.indexOf("data-") === 0) data[a.name.slice(5)] = a.value;
-      });
-      invoke("preview_action", { kind: "click", data: data }).catch(function(){});
-    }, true);
+      var t = ev.target;
+      if (!t || !t.getAttribute) return;
 
-    /* 双击：编辑类动作 */
-    bodyEl.addEventListener("dblclick", function(ev){
-      var el = ev.target;
-      var act = el.getAttribute && el.getAttribute("data-edit");
-      if (!act) return;
-      ev.preventDefault();
-      invoke("preview_action", {
-        kind: "edit",
-        data: { edit: act, text: (el.textContent || "").trim() }
-      }).catch(function(){});
-    }, true);
-
-    /* 勾选框类：click 已经能覆盖；这里只挡掉默认行为避免状态闪回 */
-    bodyEl.addEventListener("mousedown", function(ev){
-      if (ev.target && ev.target.tagName === "INPUT") {
-        /* 让 click 统一处理 */
+      /* 1. 百分比按钮：弹一个输入框，用户填完再发 */
+      var pct = closestData(t, "data-step-pct");
+      if (pct) {
         ev.preventDefault();
+        ev.stopPropagation();
+        var key = pct.getAttribute("data-step-pct");
+        var cur = (pct.textContent || "").trim();
+        var v = window.prompt("这一步完成了百分之多少？（0-100）", /^\d+$/.test(cur) ? cur : "50");
+        if (v === null) return;
+        var n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
+        send("stepPct", { key: key, pct: n });
+        return;
+      }
+
+      /* 2. 通用动作按钮 */
+      var act = closestData(t, "data-act");
+      if (act) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var data = {};
+        Array.prototype.forEach.call(act.attributes, function(a){
+          if (a.name.indexOf("data-") === 0) data[a.name.slice(5)] = a.value;
+        });
+        send("act", data);
+        return;
+      }
+
+      /* 3. 删除任务 */
+      var del = closestData(t, "data-deltask");
+      if (del) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (window.confirm("确定删除这条待办？")) {
+          send("deltask", { idx: del.getAttribute("data-deltask") });
+        }
+        return;
+      }
+
+      /* 4. 星标（重要性） */
+      var star = closestData(t, "data-star");
+      if (star) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("star", { idx: star.getAttribute("data-star") });
+        return;
+      }
+
+      /* 5. 点步骤 = 切换完成 */
+      var li = closestData(t, "data-si");
+      if (li && li.getAttribute("data-ti") != null) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("toggleSub", { ti: li.getAttribute("data-ti"), si: li.getAttribute("data-si") });
+        return;
       }
     }, true);
+
+    /* ---------- 双击：改名字 ---------- */
+    bodyEl.addEventListener("dblclick", function(ev){
+      var t = ev.target;
+      if (!t || !t.getAttribute) return;
+
+      var sub = closestData(t, "data-edit-sub");
+      if (sub) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var key = sub.getAttribute("data-edit-sub");
+        var cur = (sub.textContent || "").trim();
+        var v = window.prompt("修改步骤内容：", cur);
+        if (v === null || v === cur) return;
+        send("editSub", { key: key, text: v });
+        return;
+      }
+
+      var nm = closestData(t, "data-edit");
+      if (nm) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        var key2 = nm.getAttribute("data-edit");
+        var cur2 = (nm.textContent || "").trim();
+        var v2 = window.prompt("修改任务名：", cur2);
+        if (v2 === null || v2 === cur2) return;
+        send("editName", { key: key2, text: v2 });
+      }
+    }, true);
+
+    /* 输入框保持可用，但别让浏览器默认提交 */
+    bodyEl.addEventListener("submit", function(ev){ ev.preventDefault(); }, true);
   }
 
   function loadOnce(){
-    /* ⚠ 不走 URL 参数（HTML 太长会白屏）、也不走 eval（会阻塞） */
     invoke("preview_payload").then(render).catch(function(){
       bodyEl.textContent = "（内容读取失败）";
     });
@@ -758,6 +828,7 @@
   setTimeout(loadOnce, 220);
 })();
 </script>
+
 
 </body>
 </html>
