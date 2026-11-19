@@ -53,6 +53,19 @@ extern "system" {
 
 /// 当前是否已注册（避免重复注册）
 static REGISTERED: Mutex<bool> = Mutex::new(false);
+/// 用户是否开启了「占住屏幕边缘」（和 REGISTERED 分开：
+/// 隐藏侧边栏时会临时撤掉占位，但用户的开关状态不变，
+/// 再次呼出时要自动占回来）
+static WANTED: Mutex<bool> = Mutex::new(false);
+/// 当前注册用的是哪条边（换边时要先 REMOVE 再 NEW）
+static CUR_EDGE: Mutex<u32> = Mutex::new(ABE_RIGHT);
+
+fn is_wanted() -> bool {
+    *WANTED.lock().unwrap_or_else(|e| e.into_inner())
+}
+fn set_wanted(v: bool) {
+    *WANTED.lock().unwrap_or_else(|e| e.into_inner()) = v;
+}
 
 fn make_data(hwnd: *mut c_void, edge: u32, r: Rect) -> AppBarData {
     AppBarData {
@@ -81,12 +94,27 @@ fn _unused() {}
 /// 把窗口所在的屏幕边缘登记为 AppBar 占位。
 ///
 /// `edge` 传 `ABE_RIGHT` 或 `ABE_LEFT`；`rect` 是窗口的物理像素矩形。
-/// 返回 true 表示注册成功。
+///
+/// ⚠ 换边（左 ↔ 右）时必须先 `ABM_REMOVE` 再 `ABM_NEW`：
+/// 一个 hwnd 只能注册一条边，直接 NEW 会失败，表现为
+/// 「贴到另一边后其他应用不再让位」。
 pub fn register(win: &WebviewWindow, edge: u32, rect: Rect) -> bool {
     let Some(hwnd) = hwnd_of(win) else {
         eprintln!("[appbar] 拿不到 HWND，跳过注册");
         return false;
     };
+
+    /* 已经注册过：如果边没变，只更新位置；变了就整体重来 */
+    let was = *REGISTERED.lock().unwrap_or_else(|e| e.into_inner());
+    if was {
+        let old_edge = *CUR_EDGE.lock().unwrap_or_else(|e| e.into_inner());
+        if old_edge == edge {
+            update(win, edge, rect);
+            return true;
+        }
+        unregister(win);
+    }
+
     unsafe {
         let mut d = make_data(hwnd, edge, rect);
         let ok = SHAppBarMessage(ABM_NEW, &mut d);
@@ -94,9 +122,9 @@ pub fn register(win: &WebviewWindow, edge: u32, rect: Rect) -> bool {
             eprintln!("[appbar] ABM_NEW 失败");
             return false;
         }
-        if let Ok(mut g) = REGISTERED.lock() {
-            *g = true;
-        }
+        *REGISTERED.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        *CUR_EDGE.lock().unwrap_or_else(|e| e.into_inner()) = edge;
+
         /* 先问位置：系统会根据其它 AppBar/任务栏调整这个矩形 */
         let mut q = make_data(hwnd, edge, rect);
         SHAppBarMessage(ABM_QUERYPOS, &mut q);
@@ -132,6 +160,12 @@ pub fn update(win: &WebviewWindow, edge: u32, rect: Rect) {
     if !*REGISTERED.lock().unwrap_or_else(|e| e.into_inner()) {
         return;
     }
+    /* 换边不算「更新」，交给 register 走完整流程 */
+    let cur_edge = *CUR_EDGE.lock().unwrap_or_else(|e| e.into_inner());
+    if cur_edge != edge {
+        register(win, edge, rect);
+        return;
+    }
     let Some(hwnd) = hwnd_of(win) else { return };
     unsafe {
         let mut q = make_data(hwnd, edge, rect);
@@ -143,6 +177,12 @@ pub fn update(win: &WebviewWindow, edge: u32, rect: Rect) {
         }
         let mut s = make_data(hwnd, edge, q.rect);
         SHAppBarMessage(ABM_SETPOS, &mut s);
+        /* 窗口也摆到系统最终定下的位置，避免「占位在左边、窗口还在右边」 */
+        let _ = win.set_position(tauri::PhysicalPosition::new(s.rect.left, s.rect.top));
+        let _ = win.set_size(tauri::PhysicalSize::new(
+            (s.rect.right - s.rect.left).max(1) as u32,
+            (s.rect.bottom - s.rect.top).max(1) as u32,
+        ));
     }
 }
 
@@ -157,15 +197,34 @@ pub fn unregister(win: &WebviewWindow) {
     }
     if let Some(hwnd) = hwnd_of(win) {
         unsafe {
-            let mut d = make_data(hwnd, ABE_RIGHT, Rect::default());
+            /* 用实际注册时的那条边去移除，否则系统对不上 */
+            let e = *CUR_EDGE.lock().unwrap_or_else(|err| err.into_inner());
+            let mut d = make_data(hwnd, e, Rect::default());
             SHAppBarMessage(ABM_REMOVE, &mut d);
             /* 顺便关掉自动隐藏标记 */
-            let mut h = make_data(hwnd, ABE_RIGHT, Rect::default());
+            let mut h = make_data(hwnd, e, Rect::default());
             SHAppBarMessage(ABM_SETAUTOHIDEBAR, &mut h);
         }
         eprintln!("[appbar] 已取消占位");
     }
     *g = false;
+}
+
+/// 前端/隐藏时用：只要用户开着「占住屏幕边缘」，就按窗口实际所在的边
+/// 重新注册一次。贴到另一边、或从隐藏状态呼出后调用它，占位就能跟上。
+pub fn resync(app: &AppHandle) {
+    if !is_wanted() {
+        return;
+    }
+    let Some(win) = app.get_webview_window(crate::sidebar::LABEL) else { return };
+    /* 窗口不可见时不要占位 —— 那块空间应该还给其他应用 */
+    if !win.is_visible().unwrap_or(false) {
+        return;
+    }
+    if let Some(r) = window_rect(&win) {
+        let e = edge_of(&win);
+        register(&win, e, r);
+    }
 }
 
 /// 当前窗口的物理矩形
@@ -196,6 +255,7 @@ pub fn edge_of(win: &WebviewWindow) -> u32 {
 
 /// 给外部（命令）用：注册 / 取消
 pub fn set_enabled(app: &AppHandle, on: bool) {
+    set_wanted(on);
     let Some(win) = app.get_webview_window(crate::sidebar::LABEL) else { return };
     if on {
         if let Some(r) = window_rect(&win) {

@@ -68,8 +68,13 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("思源科研工作台启动失败")
-        .run(|_app, event| {
+        .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                /* 退出前撤掉 AppBar 占位，否则那条屏幕边缘会一直「被占着」，
+                   别的应用最大化时留一条空白，直到重启资源管理器才恢复。 */
+                if let Some(win) = app.get_webview_window(sidebar::LABEL) {
+                    appbar::unregister(&win);
+                }
                 services::stop_all();
             }
         });

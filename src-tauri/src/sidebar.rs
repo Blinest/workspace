@@ -363,6 +363,10 @@ fn snap_to_edge(app: &AppHandle, win: &WebviewWindow, content_w: u32) -> tauri::
     let after_s = win.outer_size()?;
     let saved = SavedPos { x: after_p.x, y: after_p.y, w: after_s.width, h: after_s.height, edge };
     save_pos(app, saved);
+    /* 贴边完成后，如果正在「占住屏幕边缘」，占位要跟着换到新的一边。
+       不做的话会出现：窗口移到左边了，占位还留在右边 ——
+       左边被压住、右边空一块，看起来就是「换边后别人不给我让位置」。 */
+    crate::appbar::resync(app);
     Ok(Some(saved))
 }
 
@@ -501,6 +505,11 @@ pub fn toggle(app: &AppHandle) -> tauri::Result<()> {
     match app.get_webview_window(LABEL) {
         Some(win) => {
             if win.is_visible().unwrap_or(false) {
+                /* ⚠ 隐藏前必须把 AppBar 占位一起撤掉。
+                   只 hide 窗口的话，那块屏幕边缘仍然被「占着」——
+                   其他应用最大化时会让出一条空白，看起来就是
+                   「关了侧边栏，别的界面没恢复」。 */
+                crate::appbar::unregister(&win);
                 win.hide()?;
             } else {
                 /* 呼出时保持用户上次拖到的地方，不要重置
@@ -510,6 +519,8 @@ pub fn toggle(app: &AppHandle) -> tauri::Result<()> {
                    坐标失效等），用户会以为热键失灵。这里检查一下，
                    不在这块屏内就重新吸边摆回来。 */
                 rescue_if_offscreen(app, &win);
+                /* 如果用户开着「占住屏幕边缘」，重新占位 */
+                crate::appbar::resync(app);
                 win.set_focus()?;
             }
         }
