@@ -900,6 +900,8 @@ enum PvCmd {
     Hide,
     /// 定时轮询：鼠标是否还在预览窗里
     Poll,
+    /// 只重读内容，不重建窗口
+    Reload,
 }
 
 /// 发往工作线程的 sender（None = 线程还没起来）
@@ -959,6 +961,13 @@ pub fn spawn_preview_thread(app: AppHandle) {
                         rect = None;
                         if let Some((w, _)) = cur.take() {
                             let _ = w.destroy();
+                        }
+                    }
+                    PvCmd::Reload => {
+                        /* 让页面自己重读 payload。用 eval 在这里是安全的 ——
+                           它在预览线程里执行，不占 IPC 线程。 */
+                        if let Some((w, _)) = cur.as_ref() {
+                            let _ = w.eval("if(window.__reload)window.__reload();");
                         }
                     }
                     PvCmd::Poll => {
@@ -1121,6 +1130,27 @@ pub fn preview_hide(_app: AppHandle) -> Result<(), String> {
     let tx = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone();
     if let Some(t) = tx {
         let _ = t.send(PvCmd::Hide);
+    }
+    Ok(())
+}
+
+/// 只更新预览内容，不重建窗口。
+///
+/// 预览里点了勾选框之类，侧边栏改完数据后调这个 ——
+/// 用 preview_show 会销毁重建窗口，用户正在浮层里操作会被打断。
+#[tauri::command]
+pub fn preview_update(app: AppHandle, html: String, title: String) -> Result<(), String> {
+    /* 写文件，再通知预览窗重读 */
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let _ = std::fs::create_dir_all(&dir);
+    let payload = serde_json::json!({ "title": title, "html": html });
+    let txt = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("preview-payload.json"), txt).map_err(|e| e.to_string())?;
+
+    /* 让预览窗重读（它在自己的线程里，安全） */
+    let tx = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if let Some(t) = tx {
+        let _ = t.send(PvCmd::Reload);
     }
     Ok(())
 }

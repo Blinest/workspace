@@ -359,9 +359,25 @@
   .briefCur::before{ content:"▸ "; color:#c9b98f; }
 
   .briefCur.curDone{ color:#7bb37b; }
-  .briefMore{
-    margin-top:4px; font-size:10.5px; color:#b9b2a3; padding-left:14px;
+  /* 其余未完成项：列名字，带同色小点 */
+  .briefRest{ margin-top:6px; }
+  .briefRestHead{
+    font-size:10px; color:#b9b2a3; margin-bottom:3px; padding-left:2px;
   }
+  .briefRestItem{
+    display:flex; align-items:center; gap:6px;
+    padding:2px 0; font-size:11.5px;
+  }
+  .briefRestItem .briefDot.sm{ width:5px; height:5px; box-shadow:none; }
+  .briefRestName{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--sub);
+  }
+  .briefRestItem.p1 .briefRestName{ color:#b83a3a; }
+  .briefRestItem.p2 .briefRestName{ color:#a95f21; }
+  .briefRestItem.p3 .briefRestName{ color:#8a6a10; }
+  .briefRestItem.p4 .briefRestName{ color:#2f7a4f; }
   .briefEmpty{
     font-size:11.5px; color:#7bb37b; padding:4px 0;
   }
@@ -389,6 +405,29 @@
     flex:none; color:#1B365D; font-weight:700; font-size:11.5px;
   }
   .docEmpty{ font-size:11.5px; color:#b9b2a3; font-style:italic; }
+
+  /* 详情卡：文档名加粗、编辑时间、字数右对齐 */
+  .docList{ display:flex; flex-direction:column; }
+  .docItem{
+    display:flex; align-items:baseline; gap:8px;
+    padding:5px 0; border-bottom:1px dashed rgba(226,214,186,.55);
+    font-size:11.5px;
+  }
+  .docItem:last-child{ border-bottom:none; }
+  .docItemNm{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-weight:700; color:var(--ink);
+  }
+  .docItemTime{
+    flex:none; font-size:10.5px; color:#b9b2a3;
+    font-variant-numeric:tabular-nums;
+  }
+  .docItemWc{
+    flex:none; min-width:56px; text-align:right;
+    color:#1B365D; font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
 
   .docDetailHead{
     font-size:11px; color:var(--sub); margin:2px 0 6px;
@@ -418,9 +457,9 @@
     color:var(--tc, #8a8478); opacity:.78; font-style:normal;
   }
 
-  /* 今日执行力：精简卡只显示今天的，去掉与上周的增减比较。
-     这些条目的 li 上带 .weekCmp，展开态和浮层里仍然看得到。 */
-  .scroll > .card:not(.isExpanded) .wkTodayTips li.weekCmp{ display:none !important; }
+  /* 今日执行力：精简卡只留数字（完成率 / 步骤分 / 效率 / 用时），
+     整块提示列表（.wkTodayTips）都收进展开态和悬停浮层。 */
+  .scroll > .card:not(.isExpanded) .wkTodayTips{ display:none !important; }
 
   /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
   .scroll > .card > h3{
@@ -1589,13 +1628,36 @@
     }
   }
 
-  function renderTodos(){
+  /* 内容签名：用来判断「数据到底有没有变」。
+     没变就不重绘 —— 否则后台每 5 秒轮询一次，卡片一直在闪。 */
+  var _todoSig = "";
+  function todoSig(raw){
+    try {
+      var s = JSON.stringify(raw, function(k, v){
+        /* 易变字段不参与比较：它们每次写回都会变，但界面看起来一样 */
+        if (k === "at" || k === "__oi" || k === "__pv" || k === "syncedAt") return undefined;
+        return v;
+      });
+      return s || "";
+    } catch(e) { return ""; }
+  }
+
+  function renderTodos(force){
     /* 正在编辑（双击改文字）时不要重建 DOM —— 重建会销毁编辑中的元素，
        触发 blur 把用户打的字提交成旧值。改动会在 finish() 之后自己刷。 */
     if (editGuard) return;
     var _inpSnap = snapshotInputs();
     var raw = null;
     try { raw = JSON.parse(localStorage.getItem(TODOS_KEY) || "null"); } catch(e){}
+
+    /* 数据没变就不重绘（force=true 时强制） */
+    if (!force) {
+      var sig = todoSig(raw);
+      if (sig && sig === _todoSig) return;
+      _todoSig = sig;
+    } else {
+      _todoSig = todoSig(raw);
+    }
     /* 只显示今天要做的：今天 / 无日期 / 更早但还没做完的。
        历史（更早日期的已完成任务）只用于两端存档，不在这里显示。
        ⚠ 过滤后下标就变了，而点击/编辑回写用的是**快照里的真实下标**。
@@ -1787,12 +1849,34 @@
         list.appendChild(row);
       });
 
-      /* 剩下还有几条未完成，给个提示 */
+      /* 剩下的未完成项：直接列出名字（比「还有 N 条」有用） */
       if (pending.length > 1) {
-        var more = document.createElement("div");
-        more.className = "briefMore";
-        more.textContent = "还有 " + (pending.length - 1) + " 条未完成";
-        list.appendChild(more);
+        var rest = document.createElement("div");
+        rest.className = "briefRest";
+
+        var head = document.createElement("div");
+        head.className = "briefRestHead";
+        head.textContent = "其余 " + (pending.length - 1) + " 条未完成";
+        rest.appendChild(head);
+
+        pending.slice(1).forEach(function(p){
+          var it = document.createElement("div");
+          it.className = "briefRestItem " + p.prio.cls;
+          it.title = p.name;
+
+          var d2 = document.createElement("span");
+          d2.className = "briefDot sm";
+          it.appendChild(d2);
+
+          var n2 = document.createElement("span");
+          n2.className = "briefRestName";
+          n2.textContent = p.name;
+          it.appendChild(n2);
+
+          rest.appendChild(it);
+        });
+
+        list.appendChild(rest);
       }
 
       brief.appendChild(list);
@@ -3197,13 +3281,18 @@
         }
         h += '</div>';
 
-        /* 完整版（不做重复） */
+        /* 完整版：文档名加粗、字数右对齐、带上编辑时间 */
         var detail = '<div class="docDetail">';
         detail += '<div class="docDetailHead">今天编辑 ' + edited.length + ' 篇 · 共 ' + fmtWc(todayWc) + ' 字</div>';
         if (sorted.length) {
-          detail += '<div class="recent">' + sorted.map(function(d){
+          detail += '<div class="docList">' + sorted.map(function(d){
             var n = String(d.content || "").replace(/<[^>]+>/g, "").trim() || "（无标题）";
-            return '<div class="rline" title="' + esc(n) + '">· ' + esc(n) + ' <i>' + fmtWc(d.wc) + ' 字</i></div>';
+            var t = fmtClock(d.updated);
+            return '<div class="docItem" title="' + esc(n) + '">'
+              + '<span class="docItemNm">' + esc(n) + '</span>'
+              + '<span class="docItemTime">' + esc(t) + '</span>'
+              + '<span class="docItemWc">' + fmtWc(d.wc) + ' 字</span>'
+              + '</div>';
           }).join("") + '</div>';
         }
         detail += '</div>';
@@ -3213,6 +3302,13 @@
         if (at) at.textContent = "实时";
       });
     }).catch(function(e){ fail(body, at, e); });
+  }
+
+  /* 思源 updated 是 YYYYMMDDHHMMSS，转成 HH:MM */
+  function fmtClock(s){
+    s = String(s || "");
+    if (s.length < 12) return "";
+    return s.slice(8, 10) + ":" + s.slice(10, 12);
   }
 
   /* 数字格式化：1080 → 1,080；233800 → 23.4 万 */
@@ -3389,7 +3485,7 @@
         + '<div><b>' + fmtNum(total) + '</b><span>数据行</span></div>'
         + '</div>';
 
-      /* 标签：按笔记本分组，显示每个笔记本的库数 / 行数 */
+      /* 标签不再放精简卡（和预览卡重复了），挪到详情顶部 */
       var byNb = {};
       list.forEach(function(d){
         var k = d.nb || "未分类";
@@ -3399,13 +3495,16 @@
       });
       var names = Object.keys(byNb);
       if (names.length) {
-        /* 每个笔记本一个颜色：按名字稳定取色，重启后不变 */
-        brief.innerHTML += '<div class="chips dbTagChips">' + names.map(function(k, idx){
+        var chips = '<div class="chips dbTagChips">' + names.map(function(k, idx){
           var col = NB_COLORS[idx % NB_COLORS.length];
           return '<span class="chip dbTag" style="--tc:' + col + '" title="' + esc(k) + '">'
             + '<b class="dbTagDot"></b>' + esc(k)
             + '<i>' + byNb[k].n + ' 库 · ' + byNb[k].rows + ' 行</i></span>';
         }).join("") + '</div>';
+        /* 插到 detail 最前面 */
+        var wrap = document.createElement("div");
+        wrap.innerHTML = chips;
+        detail.insertBefore(wrap.firstChild, detail.firstChild);
       }
 
       body.innerHTML = "";
@@ -7326,6 +7425,14 @@
         var cp = ch.cloneNode(true);
         if (cp.querySelectorAll) {
           Array.prototype.forEach.call(cp.querySelectorAll("[id]"), function(n){ n.removeAttribute("id"); });
+          /* 待办预览里去掉上传/拉取/跳转这几个图标按钮 ——
+             他们在浮层里点着没意义（浮层本身就是从侧边栏抓的） */
+          Array.prototype.forEach.call(
+            cp.querySelectorAll("#btnPull, #btnPush, #btnMore, .hdBtn"),
+            function(n){ n.remove(); }
+          );
+          /* 项目名前后的装饰点也去掉 */
+          Array.prototype.forEach.call(cp.querySelectorAll(".pdot"), function(n){ n.remove(); });
         }
         cp.removeAttribute && cp.removeAttribute("id");
         box.appendChild(cp);
@@ -7630,6 +7737,26 @@
             if (t6 && d.text) { t6.name = String(d.text); changed = true; }
           }
 
+          /* ---- 数据库展开 / 折叠 ---- */
+          else if (kind === "dbToggle") {
+            if (d.kind === "nb") {
+              nbOpen[d.key] = !nbOpen[d.key];
+            } else if (d.kind === "av") {
+              dbOpen[d.key] = !dbOpen[d.key];
+            }
+            /* 这里直接用 paintDb 重绘卡片（不经过 localStorage），
+               然后再刷新预览内容 */
+            try { if (typeof paintDb === "function") paintDb(); } catch(e){}
+            setTimeout(function(){
+              if (!curCard) return;
+              invokeP("preview_update", {
+                html: grabHtml(curCard),
+                title: cardTitle(curCard)
+              }).catch(function(){});
+            }, 120);
+            return;   /* 已自行刷新，不走下面的通用刷新 */
+          }
+
           /* ---- 改步骤名 ---- */
           else if (kind === "editSub") {
             var parts3 = String(d.key || "").split(":");
@@ -7650,10 +7777,16 @@
           try { if (typeof renderWeek === "function") renderWeek(); } catch(e){}
         }
 
-        /* 动作执行完刷新浮层，显示最新数据 */
+        /* 动作执行完刷新浮层内容。
+           ⚠ 用 preview_update 而不是 doShow —— 后者会销毁重建窗口，
+           用户连着点几下会被打断，还会闪。 */
         setTimeout(function(){
-          if (curCard) doShow(curCard);
-        }, 280);
+          if (!curCard) return;
+          invokeP("preview_update", {
+            html: grabHtml(curCard),
+            title: cardTitle(curCard)
+          }).catch(function(){});
+        }, 260);
       });
     })();
 

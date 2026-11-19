@@ -655,15 +655,62 @@
   .empty code{ background:#f3f0e5; border:0.9px solid var(--line); border-radius:3.8px; padding:0 3.8px; font-size:10.4px; }
   .foot{ flex:none; border-top:0.9px solid var(--line); padding:5.7px 11.4px; font-size:10.0px; color:#4a453d; }
 
+  /* ---- 自定义输入弹框 ----
+     window.prompt / confirm 在 Tauri 里会弹出
+     「tauri.localhost 想要…」这种系统提示，很难看。
+     这里用页面内的浮层代替。 */
+  #askMask{
+    position:fixed; inset:0; z-index:9999;
+    background:rgba(40,36,30,.28);
+    display:none; align-items:center; justify-content:center;
+  }
+  #askMask.on{ display:flex; }
+  #askBox{
+    width:272px; box-sizing:border-box;
+    background:rgba(255,251,238,.99);
+    border:1px solid rgba(226,214,186,.9);
+    border-radius:12px; padding:14px;
+    box-shadow:0 8px 28px rgba(80,70,50,.24);
+  }
+  #askTitle{ font-size:12px; font-weight:600; color:#2b2a26; margin-bottom:9px; }
+  #askInput{
+    width:100%; box-sizing:border-box;
+    padding:7px 9px; font:12px/1.5 inherit; font-family:inherit;
+    border:1px solid rgba(200,190,170,.85); border-radius:6px;
+    background:#fffdf7; color:#2b2a26; outline:none;
+  }
+  #askInput:focus{ border-color:#d9a015; box-shadow:0 0 0 2px rgba(217,160,21,.16); }
+  #askBtns{ display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+  #askBtns button{
+    padding:5px 14px; font:12px/1 inherit; font-family:inherit;
+    border-radius:6px; cursor:pointer;
+    border:1px solid rgba(200,190,170,.85); background:#fffdf7; color:#5f5a51;
+  }
+  #askBtns button:hover{ background:#f7f3ea; }
+  #askOk{ background:#d9a015; border-color:#c8900f; color:#fff; }
+  #askOk:hover{ background:#c8900f; }
+
 </style>
 </head>
 <body>
   <div id="card">
     <div class="pvTitle">
       <span id="name">预览</span>
-      <span class="pvHint">只读预览</span>
+      <span class="pvHint" id="pvHint"></span>
     </div>
     <div id="body"></div>
+  </div>
+
+<!-- 页面内的输入框（代替 window.prompt） -->
+  <div id="askMask">
+    <div id="askBox">
+      <div id="askTitle">输入</div>
+      <input id="askInput" type="text" />
+      <div id="askBtns">
+        <button id="askCancel">取消</button>
+        <button id="askOk">确定</button>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -671,6 +718,62 @@
   "use strict";
   var nameEl = document.getElementById("name");
   var bodyEl = document.getElementById("body");
+
+  /* ---- 页面内输入框（替代 window.prompt / confirm）----
+     Tauri 里调 prompt 会弹「tauri.localhost 想要…」的系统提示，
+     又丑又会中断手感。这里用页面内的浮层。 */
+  var askMask = document.getElementById("askMask");
+  var askBox = document.getElementById("askBox");
+  var askTitle = document.getElementById("askTitle");
+  var askInput = document.getElementById("askInput");
+  var askOk = document.getElementById("askOk");
+  var askCancel = document.getElementById("askCancel");
+  var askResolve = null;
+  var askIsConfirm = false;
+
+  function closeAsk(val){
+    askMask.classList.remove("on");
+    var r = askResolve;
+    askResolve = null;
+    if (r) r(val);
+  }
+
+  function openAsk(title, defVal, isConfirm){
+    return new Promise(function(resolve){
+      askResolve = resolve;
+      askIsConfirm = !!isConfirm;
+      askTitle.textContent = title;
+      askInput.value = defVal == null ? "" : String(defVal);
+      askInput.style.display = isConfirm ? "none" : "block";
+      askMask.classList.add("on");
+      if (!isConfirm) {
+        setTimeout(function(){ askInput.focus(); askInput.select(); }, 30);
+      }
+    });
+  }
+
+  /* 返回字符串；取消返回 null */
+  function askText(title, defVal){
+    return openAsk(title, defVal, false);
+  }
+  /* 返回 true / false */
+  function askConfirm(title){
+    return openAsk(title, "", true).then(function(v){ return v !== null && v !== false; });
+  }
+
+  if (askOk) {
+    askOk.addEventListener("click", function(){
+      closeAsk(askIsConfirm ? true : askInput.value);
+    });
+    askCancel.addEventListener("click", function(){ closeAsk(null); });
+    askInput.addEventListener("keydown", function(e){
+      if (e.key === "Enter") { e.preventDefault(); closeAsk(askInput.value); }
+      if (e.key === "Escape") { e.preventDefault(); closeAsk(null); }
+    });
+    askMask.addEventListener("click", function(e){
+      if (e.target === askMask) closeAsk(null);
+    });
+  }
 
   function invoke(cmd, args){
     try {
@@ -734,10 +837,11 @@
         ev.stopPropagation();
         var key = pct.getAttribute("data-step-pct");
         var cur = (pct.textContent || "").trim();
-        var v = window.prompt("这一步完成了百分之多少？（0-100）", /^\d+$/.test(cur) ? cur : "50");
-        if (v === null) return;
-        var n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
-        send("stepPct", { key: key, pct: n });
+        askText("这一步完成了百分之多少？（0-100）", /^\d+$/.test(cur) ? cur : "50").then(function(v){
+          if (v === null) return;
+          var n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
+          send("stepPct", { key: key, pct: n });
+        });
         return;
       }
 
@@ -759,9 +863,25 @@
       if (del) {
         ev.preventDefault();
         ev.stopPropagation();
-        if (window.confirm("确定删除这条待办？")) {
-          send("deltask", { idx: del.getAttribute("data-deltask") });
-        }
+        askConfirm("确定删除这条待办？").then(function(ok){
+          if (ok) send("deltask", { idx: del.getAttribute("data-deltask") });
+        });
+        return;
+      }
+
+      /* 3.5 数据库：笔记本 / 单个数据库的展开 */
+      var nb = closestData(t, "data-nb");
+      if (nb) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("dbToggle", { kind: "nb", key: nb.getAttribute("data-nb") });
+        return;
+      }
+      var av = closestData(t, "data-av");
+      if (av) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("dbToggle", { kind: "av", key: av.getAttribute("data-av") });
         return;
       }
 
@@ -795,9 +915,10 @@
         ev.stopPropagation();
         var key = sub.getAttribute("data-edit-sub");
         var cur = (sub.textContent || "").trim();
-        var v = window.prompt("修改步骤内容：", cur);
-        if (v === null || v === cur) return;
-        send("editSub", { key: key, text: v });
+        askText("修改步骤内容：", cur).then(function(v){
+          if (v === null || v === cur) return;
+          send("editSub", { key: key, text: v });
+        });
         return;
       }
 
@@ -807,9 +928,10 @@
         ev.stopPropagation();
         var key2 = nm.getAttribute("data-edit");
         var cur2 = (nm.textContent || "").trim();
-        var v2 = window.prompt("修改任务名：", cur2);
-        if (v2 === null || v2 === cur2) return;
-        send("editName", { key: key2, text: v2 });
+        askText("修改任务名：", cur2).then(function(v2){
+          if (v2 === null || v2 === cur2) return;
+          send("editName", { key: key2, text: v2 });
+        });
       }
     }, true);
 
@@ -824,6 +946,8 @@
   }
 
   window.__renderPreview = render;
+  /* Rust 侧内容更新后会调它，只重读文件、不动窗口 */
+  window.__reload = loadOnce;
   loadOnce();
   setTimeout(loadOnce, 220);
 })();
