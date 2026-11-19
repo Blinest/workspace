@@ -1684,35 +1684,77 @@
     } else {
       _todoSig = todoSig(raw);
     }
-    /* 只显示今天要做的：今天 / 无日期 / 更早但还没做完的。
-       历史（更早日期的已完成任务）只用于两端存档，不在这里显示。
+    /* 显示规则：
+         · 明确标了 hist 的 → 不显示
+         · 还有未完成步骤 → 显示
+         · 步骤**今天**才全部做完 → 仍显示（让你看到自己刚完成的）
+         · 步骤全部完成且不是今天做完的 → 隐藏（第二天自动消失）
+         · 没有步骤的任务 → 看它自己的 done 标记，同理
+
+       一句话：**当天做完的留着，第二天自动隐藏**。
+
        ⚠ 过滤后下标就变了，而点击/编辑回写用的是**快照里的真实下标**。
-       以前直接把过滤后的位置写进 data-ti，于是「侧边栏勾选」改到的是
-       另一条任务（或越界什么都不改）—— 表现就是「勾了没反应 / 勾错条」。
        这里给每条任务挂上它在快照里的原始位置 __oi，渲染时用它当 data-ti。 */
     if (raw && Array.isArray(raw.items)) {
       var _today = todayStr();
       var _all = raw.items;
+
+      /* 把 doneAt 统一转成 YYYY-MM-DD。
+         ⚠ doneAt 可能是：
+            · 毫秒时间戳（数字）   ← 大多数情况
+            · "2026-11-19"         ← 文档里解析出来的
+            · 空
+         以前直接 String(x).slice(0,10)，时间戳会变成 "1795..."，全都不匹配。 */
+      function dayOf(v){
+        if (v == null || v === "") return "";
+        var s = String(v);
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        var n = Number(v);
+        if (isFinite(n) && n > 1000000000000) {   // 毫秒时间戳
+          var d = new Date(n);
+          var p = function(x){ return x < 10 ? "0" + x : "" + x; };
+          return d.getFullYear() + "-" + p(d.getMonth()+1) + "-" + p(d.getDate());
+        }
+        if (isFinite(n) && n > 1000000000) {      // 秒级时间戳
+          var d2 = new Date(n * 1000);
+          var p2 = function(x){ return x < 10 ? "0" + x : "" + x; };
+          return d2.getFullYear() + "-" + p2(d2.getMonth()+1) + "-" + p2(d2.getDate());
+        }
+        return "";
+      }
+
+      /* 某条任务「最后一次完成动作」发生在哪天（YYYY-MM-DD） */
+      function finishedDay(t){
+        var subs = t.subs || [];
+        if (!subs.length) {
+          var dd = dayOf(t.doneAt);
+          return dd || String(t.date || "");
+        }
+        var last = "";
+        for (var i = 0; i < subs.length; i++) {
+          var s = subs[i];
+          if (!s || !s.done) continue;
+          var d = dayOf(s.doneAt);
+          if (d && d > last) last = d;
+        }
+        /* 子步骤没有 doneAt（老数据）→ 退回任务的 date */
+        return last || String(t.date || "");
+      }
+
       raw = Object.assign({}, raw, {
         items: _all.filter(function(t, oi){
           if (!t) return false;
           t.__oi = oi;                              /* 快照里的真实下标 */
           if (t.hist) return false;                 /* 明确标了历史的就跳过 */
-          if (!t.date) return true;                 /* 无日期：显示 */
-          if (t.date === _today) return true;       /* 今天：显示 */
-          if (t.date < _today) {
-            /* 更早：还有未完成步骤 → 显示；
-               全做完但「今天才做完最后一步」的也要显示，
-               否则一勾它就消失，正好和你刚做的动作对着。 */
-            var subs = t.subs || [];
-            if (!subs.length) return false;         /* 没步骤的旧任务不显示 */
-            if (subs.some(function(s){ return s && !s.done; })) return true;
-            return subs.some(function(s){
-              if (!s || !s.done) return false;
-              return s.doneAt ? s.doneAt === _today : false;
-            });
-          }
-          return false;                             /* 未来日期：不显示 */
+
+          var subs = t.subs || [];
+          var allDone = subs.length
+            ? subs.every(function(s){ return !s || s.done; })
+            : !!t.done;
+
+          if (!allDone) return true;                /* 没做完：一直显示 */
+          /* 做完了：今天做完的还留着，第二天才隐藏 */
+          return finishedDay(t) === _today;
         })
       });
     }
