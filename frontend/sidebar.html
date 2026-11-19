@@ -6193,6 +6193,35 @@
   }
   $("btnHide").addEventListener("click", hide);
 
+  /* ---------- 右键 → 打开主窗口的「设置 → 侧边栏」----------
+     侧边栏上右键原本是 WebView 的默认菜单（刷新、检查元素…），
+     对普通用户没什么用。改成直达侧边栏的设置，改快捷键、
+     开关「占住屏幕边缘」都在那里，比记快捷键更直观。
+     做法：拦掉 contextmenu，打开主窗口并把页签切到设置。 */
+  document.addEventListener("contextmenu", function(ev){
+    /* 输入框里右键保留系统菜单（粘贴、全选还是要用的） */
+    var t = ev.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    ev.preventDefault();
+    openSidebarSettings();
+  });
+
+  /* 让主窗口切到「设置」页并滚到侧边栏卡片 */
+  function openSidebarSettings(){
+    try {
+      /* 用一个 request 键通知主窗口去做切换（主窗口常驻监听） */
+      var seq = String(Date.now());
+      localStorage.setItem("dsh.worktable.openSettings.v1",
+        JSON.stringify({ panel: "sidebar", seq: seq, at: Date.now() }));
+    } catch(e){}
+    /* 打开（或聚焦）主窗口 */
+    try {
+      var iv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      if (iv) iv("show_main").catch(function(){});
+    } catch(e){}
+    todoHint("已打开设置 → 侧边栏", "#2f7a4f");
+  }
+
   /* ---------- 底部提示里的快捷键 ----------
      主窗口「设置 → 侧边栏」可以改全局快捷键，这里要跟着变，
      否则底部还写着 Ctrl+Alt+Space，用户按了没反应。

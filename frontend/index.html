@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.1.1 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.1.2 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -67,6 +67,8 @@ html, body { margin: 0; padding: 0; }
 .dshell-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--dsw-alias-border-l1, #262b36); }
 .dshell-tab { padding: 7px 12px; font-size: 12.5px; color: var(--dsw-alias-label-secondary, #9aa4b2); cursor: pointer; border: none; background: none; font: inherit; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .dshell-tabOn { color: var(--dsw-alias-label-primary, #e6e8eb); border-bottom-color: var(--dsw-alias-state-accent-primary, #4f8ef7); }
+/* 带 hidden 的页签一律不显示（发布版用它藏起没依赖支撑的功能） */
+.dshell-tab[hidden] { display: none !important; }
 /* 列表 */
 .dshell-list { display: flex; flex-direction: column; gap: 6px; }
 .dshell-listItem { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--dsw-alias-border-l1, #262b36); border-radius: 8px; background: var(--dsw-alias-fill-l1, rgba(255,255,255,.02)); cursor: pointer; }
@@ -1222,7 +1224,9 @@ html, body { margin: 0; padding: 0; }
   <div class="dshell-tabs" id="tabs">
     <button class="dshell-tab dshell-tabOn" data-pane="route">工作规划</button>
     <button class="dshell-tab" data-pane="graph">知识检索</button>
-    <button class="dshell-tab" data-pane="siyuan">剪藏助手</button>
+    <!-- 剪藏助手：发布版隐藏（抓取服务依赖 Python + scrapling，不随包分发）。
+         开发时把 hidden 去掉就能用，页面和逻辑都还在。 -->
+    <button class="dshell-tab" data-pane="siyuan" hidden>剪藏助手</button>
     <button class="dshell-tab" data-pane="db">数据库汇总</button>
     <button class="dshell-tab" data-pane="invoice">发票管家</button>
     <button class="dshell-tab" data-pane="settings">设置</button>
@@ -1495,7 +1499,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.1</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.2</span>
   </div>
 </div>
 
@@ -8847,6 +8851,62 @@ document.querySelectorAll(".lg-head").forEach(function(h){
       if (typeof W === "function") W();
     } catch(e){}
   }, 1500);
+})();
+</script>
+<script>
+/* ---------- 侧边栏右键 → 打开「设置 → 侧边栏」----------
+   侧边栏在 contextmenu 里往 localStorage 投一条请求，
+   这里收到后切到设置页并滚到侧边栏那张卡片。
+   用共享存储通信，是因为两个窗口跑在不同的 WebView 上下文里。 */
+(function(){
+  "use strict";
+  var KEY = "dsh.worktable.openSettings.v1";
+  var lastSeq = null;
+
+  function goSettings(panel){
+    var tab = document.querySelector('#tabs .dshell-tab[data-pane="settings"]');
+    if (tab) tab.click();
+
+    setTimeout(function(){
+      var card = null;
+      if (panel === "sidebar") {
+        var subs = document.querySelectorAll('#pane-settings .dshell-sub');
+        for (var i = 0; i < subs.length; i++) {
+          if (String(subs[i].textContent || "").trim() === "侧边栏") {
+            card = subs[i].closest(".dshell-card");
+            break;
+          }
+        }
+      }
+      if (card && card.scrollIntoView) {
+        try { card.scrollIntoView({ block: "center", behavior: "smooth" }); } catch(e){}
+      }
+      if (card) {
+        card.style.transition = "box-shadow .3s";
+        card.style.boxShadow = "0 0 0 2px #d9a015, 0 8px 24px -12px rgba(217,160,21,.6)";
+        setTimeout(function(){ card.style.boxShadow = ""; }, 2200);
+      }
+    }, 150);
+  }
+
+  window.addEventListener("storage", function(ev){
+    if (ev.key !== KEY || !ev.newValue) return;
+    try {
+      var req = JSON.parse(ev.newValue);
+      if (!req || req.seq === lastSeq) return;
+      lastSeq = req.seq;
+      goSettings(req.panel || "sidebar");
+    } catch(e){}
+  });
+
+  /* 主窗口如果是请求之后才被打开的，启动时补一次 */
+  try {
+    var r = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (r && r.seq && (Date.now() - (r.at || 0)) < 8000) {
+      lastSeq = r.seq;
+      setTimeout(function(){ goSettings(r.panel || "sidebar"); }, 500);
+    }
+  } catch(e){}
 })();
 </script>
 </body>
