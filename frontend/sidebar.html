@@ -3306,24 +3306,61 @@
          之前写成 r[2]，取到 undefined，「今日编辑」永远是 0 篇。 */
       var edited = r[1] || [];
 
-      /* ⚠ length(content) 统计的是**标题字数**（content 列存的就是文档标题），
-         不是正文。正文要单独查 —— 用同一个 SQL 查不到。
-         这里对今天的文档逐个查它子块的字数之和。 */
+      /* ⚠ 字数用**思源自己的口径**（/api/block/getBlocksWordCount 的
+         wordCount：中文按词、英文按词，不含标点和空白），
+         不能用 length(content) —— 那是字符数，会偏大很多。
+
+         主界面已经在算这份数据并缓存在 localStorage 里，
+         这里直接复用，既准又快。缓存键是「文档 id」或「id@updated」。 */
+      var WC_KEY = "dsh.worktable.wordcount.v1";
+      var wcCache = {};
+      try { wcCache = JSON.parse(localStorage.getItem(WC_KEY) || "{}") || {}; } catch(e){ wcCache = {}; }
+
+      function cachedWc(doc){
+        var id = String(doc.id || "");
+        if (!id) return null;
+        /* 优先 id@updated，再退回纯 id */
+        var k1 = id + "@" + String(doc.updated || "");
+        if (wcCache[k1] != null && wcCache[k1] >= 0) return wcCache[k1];
+        if (wcCache[id] != null && wcCache[id] >= 0) return wcCache[id];
+        return null;
+      }
+
+      /* 缓存里没有的，直接问思源 */
       var sumP = edited.map(function(d){
-        return sql("SELECT sum(length(content)) AS wc FROM blocks WHERE root_id='" + d.id + "' AND type IN ('p','h','l','i','t','c')")
-          .then(function(x){ return (x && x[0] && x[0].wc) || 0; })
+        var hit = cachedWc(d);
+        if (hit != null) return Promise.resolve(hit);
+        return syPost("/api/block/getBlocksWordCount", { ids: [d.id] })
+          .then(function(st){
+            if (st && st.stat) {
+              if (typeof st.stat.wordCount === "number") return st.stat.wordCount;
+              if (typeof st.stat.runeCount === "number") return st.stat.runeCount;
+            }
+            return 0;
+          })
           .catch(function(){ return 0; });
       });
 
-      /* 全库总字数：按 root_id 聚合所有文档正文块。
-         一次查完再按文档分组，比逐个查快得多。 */
-      var totalP = sql("SELECT root_id, sum(length(content)) AS wc FROM blocks WHERE type IN ('p','h','l','i','t','c') AND box!='' GROUP BY root_id")
-        .then(function(rows){
-          var t = 0;
-          (rows || []).forEach(function(x){ t += Number(x.wc) || 0; });
-          return t;
-        })
-        .catch(function(){ return 0; });
+      /* 全库总字数：把缓存里所有文档的字数加起来。
+         ⚠ 缓存里同一文档可能有两条（id 和 id@updated），
+         直接全加会翻倍。这里按 id 去重，优先用带版本的那条。 */
+      var totalP = Promise.resolve().then(function(){
+        var byId = {};
+        Object.keys(wcCache).forEach(function(k){
+          var v = wcCache[k];
+          if (typeof v !== "number" || v < 0) return;
+          var at = k.indexOf("@");
+          var id2 = at >= 0 ? k.slice(0, at) : k;
+          var versioned = at >= 0;
+          var prev = byId[id2];
+          if (!prev || (versioned && !prev.versioned)) {
+            byId[id2] = { v: v, versioned: versioned };
+          }
+        });
+        var t = 0;
+        Object.keys(byId).forEach(function(id2){ t += byId[id2].v; });
+        return t;
+      });
 
       return Promise.all([Promise.all(sumP), totalP]).then(function(rs){
         var wcs = rs[0], totalWc = rs[1];

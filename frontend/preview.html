@@ -792,6 +792,35 @@
     cursor: text;
   }
 
+  /* 预览里的步骤百分比滑动条 */
+  .pvPctBox{
+    display:flex; align-items:center; gap:7px;
+    margin:3px 0 5px 14px; padding:5px 8px;
+    border:1px solid #d8d0bd; background:#fffbe9; border-radius:5px;
+    box-sizing:border-box;
+  }
+  .pvPctBox .stepPctLbl{ flex:none; font-size:10px; color:#7a6f5c; }
+  .pvPctBox input[type="range"]{
+    flex:1 1 auto; min-width:0; height:4px;
+    accent-color:#d9822b; cursor:pointer;
+  }
+  .pvPctBox .stepPctVal{
+    flex:none; min-width:34px; text-align:right;
+    font-size:10.5px; font-weight:600; color:#8a6d2f;
+  }
+  .pvPctBox .stepPctOk{
+    flex:none; padding:2px 9px; border:1px solid #d9a015;
+    background:#fbeec4; color:#8a6d2f; border-radius:4px;
+    font:10.5px/1.5 inherit; font-family:inherit; font-weight:600; cursor:pointer;
+  }
+  .pvPctBox .stepPctOk:hover{ background:#f7e3ac; }
+  .pvPctBox .stepPctCancel{
+    flex:none; padding:2px 7px; border:1px solid #ded6c4;
+    background:#fffdf7; color:#9a9384; border-radius:4px;
+    font:10.5px/1.5 inherit; font-family:inherit; cursor:pointer;
+  }
+  .pvPctBox .stepPctCancel:hover{ background:#f4efe4; }
+
 </style>
 </head>
 <body>
@@ -923,27 +952,26 @@
     invoke("preview_action", { kind: kind, data: data }).catch(function(){});
   }
 
+  /* ⚠ 监听器绑在 **document** 而不是 bodyEl：
+       render() 每次替换 bodyEl 的子节点，如果绑定挂在子节点上会失效；
+       挂在 bodyEl 本身有时也会因为时序问题拿不到新节点。
+       绑定到 document 一次，永久有效。 */
   function bindActions(){
-    if (bodyEl.__bound) return;
-    bodyEl.__bound = true;
+    if (window.__pvBound) return;
+    window.__pvBound = true;
+    var bindTarget = document;
 
     /* ---------- 单击 ---------- */
-    bodyEl.addEventListener("click", function(ev){
+    bindTarget.addEventListener("click", function(ev){
       var t = ev.target;
       if (!t || !t.getAttribute) return;
 
-      /* 1. 百分比按钮：弹一个输入框，用户填完再发 */
+      /* 1. 百分比按钮：展开一条滑动条（和侧边栏一样，不用弹框） */
       var pct = closestData(t, "data-step-pct");
       if (pct) {
         ev.preventDefault();
         ev.stopPropagation();
-        var key = pct.getAttribute("data-step-pct");
-        var cur = (pct.textContent || "").trim();
-        askText("这一步完成了百分之多少？（0-100）", /^\d+$/.test(cur) ? cur : "50").then(function(v){
-          if (v === null) return;
-          var n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
-          send("stepPct", { key: key, pct: n });
-        });
+        togglePctBox(pct);
         return;
       }
 
@@ -1010,6 +1038,81 @@
        以前双击弹一个输入框让用户确认，多一步操作。
        现在直接把那个元素变成可编辑，回车 / 失焦即提交，Esc 取消。
        和侧边栏卡片里的双击行为一致。 */
+    /* ---------- 步骤百分比：滑动条 ----------
+       侧边栏里点 % 会展开一条滑动条。预览是拷贝的 DOM，
+       这个面板不会带过来，所以在这里现做一份。 */
+    var pctBox = null;
+    function closePctBox(){
+      if (pctBox && pctBox.parentNode) pctBox.parentNode.removeChild(pctBox);
+      pctBox = null;
+    }
+    function togglePctBox(btn){
+      var key = btn.getAttribute("data-step-pct");
+      /* 再点同一个就收起 */
+      if (pctBox && pctBox.getAttribute("data-for") === key) { closePctBox(); return; }
+      closePctBox();
+
+      var curTxt = (btn.textContent || "").trim();
+      var cur = /^\d+$/.test(curTxt) ? parseInt(curTxt, 10) : 0;
+
+      var box = document.createElement("div");
+      box.className = "stepPctBox pvPctBox";
+      box.setAttribute("data-for", key);
+
+      var lbl = document.createElement("span");
+      lbl.className = "stepPctLbl";
+      lbl.textContent = "完成";
+      box.appendChild(lbl);
+
+      var range = document.createElement("input");
+      range.type = "range";
+      range.min = "0";
+      range.max = "100";
+      range.step = "5";
+      range.value = cur;
+      range.className = "stepPctRange";
+      box.appendChild(range);
+
+      var val = document.createElement("span");
+      val.className = "stepPctVal";
+      val.textContent = cur + "%";
+      box.appendChild(val);
+
+      var ok = document.createElement("button");
+      ok.className = "stepPctOk";
+      ok.textContent = "定";
+      box.appendChild(ok);
+
+      var cancel = document.createElement("button");
+      cancel.className = "stepPctCancel";
+      cancel.textContent = "✕";
+      box.appendChild(cancel);
+
+      /* 拖动时只更新数字，松手/点「定」才提交 */
+      range.addEventListener("input", function(){ val.textContent = range.value + "%"; });
+      range.addEventListener("change", function(){
+        val.textContent = range.value + "%";
+      });
+
+      ok.addEventListener("click", function(e2){
+        e2.preventDefault();
+        e2.stopPropagation();
+        send("stepPct", { key: key, pct: parseInt(range.value, 10) || 0 });
+        closePctBox();
+      });
+      cancel.addEventListener("click", function(e2){
+        e2.preventDefault();
+        e2.stopPropagation();
+        closePctBox();
+      });
+
+      /* 插到这个步骤 li 的后面 */
+      var li = btn.closest("li") || btn.parentNode;
+      li.parentNode.insertBefore(box, li.nextSibling);
+      pctBox = box;
+      try { range.focus(); } catch(e2){}
+    }
+
     var editingEl = null;
     var editingOrig = "";
 
@@ -1066,7 +1169,7 @@
       el.textContent = editingOrig;
     }
 
-    bodyEl.addEventListener("dblclick", function(ev){
+    bindTarget.addEventListener("dblclick", function(ev){
       var t = ev.target;
       if (!t || !t.getAttribute) return;
 
@@ -1100,12 +1203,12 @@
     };
 
     /* 输入框保持可用，但别让浏览器默认提交 */
-    bodyEl.addEventListener("submit", function(ev){ ev.preventDefault(); }, true);
+    bindTarget.addEventListener("submit", function(ev){ ev.preventDefault(); }, true);
 
     /* ---- 搜索框输入 ----
        预览是独立窗口，它这里没有侧边栏的 DOM，
        所以把输入内容发给侧边栏去过滤。 */
-    bodyEl.addEventListener("input", function(ev){
+    bindTarget.addEventListener("input", function(ev){
       var t = ev.target;
       if (!t || !t.classList || !t.classList.contains("pvDbSearch")) return;
       send("dbSearch", { q: t.value });
