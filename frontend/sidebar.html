@@ -285,28 +285,24 @@
 
   /* 卡片：固定高度 + 内部滚动。
      collapsed 状态下内容不显示，只留标题行。 */
+  /* 卡片：**不出现滚动条**。
+     折叠态只露标题；展开态把内容完整铺开（高度由内容决定）。
+     内容多的细节交给悬停浮层看，卡片里保持清爽。 */
   .scroll > .card{
     flex:0 0 auto; position:relative;
-    max-height:216px; overflow-y:auto; overflow-x:hidden;
+    overflow:hidden;
     transition:max-height .26s cubic-bezier(.22,.61,.36,1);
-    scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.32) transparent;
   }
-  .scroll > .card::-webkit-scrollbar{ width:6px; }
-  .scroll > .card::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.3); border-radius:3px; }
-  .scroll > .card::-webkit-scrollbar-track{ background:transparent; }
 
-  /* 番茄钟内容少，给个更矮的上限 */
-  .scroll > .card#cardPomo{ max-height:none; overflow:hidden; }
-
-  /* ---- 折叠态 ---- */
+  /* 折叠态：只留标题行 */
   .scroll > .card.isCollapsed{
     max-height:46px; overflow:hidden;
   }
   .scroll > .card.isCollapsed > :not(h3){ display:none !important; }
 
-  /* ---- 展开态（双击 / 点按钮）---- */
+  /* 展开态：内容全部铺开，不设高度上限、不出滚动条 */
   .scroll > .card.isExpanded{
-    max-height:420px; overflow-y:auto;
+    max-height:none; overflow:visible;
   }
 
   /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
@@ -892,7 +888,7 @@
   </div>
 
   <div class="card" id="cardGraph">
-    <h3>知识图谱 <span class="mini" id="graphAt"></span></h3>
+    <h3>文档检索 <span class="mini" id="graphAt"></span></h3>
     <div id="graphBody" class="empty">读取中…</div>
   </div>
 
@@ -7000,18 +6996,70 @@
     }
 
     function doShow(card){
-      if (!card.querySelector("h3")) return;
+      var h3 = card.querySelector("h3");
+      if (!h3) return;
       curCard = card;
       var g = sideGeom();
+      var dpr = window.devicePixelRatio || 1;
+
+      /* 顶部基准 = 这张卡片的顶边（不是侧边栏顶） */
+      var r = card.getBoundingClientRect();
+      var topCss = (window.screenY || 0) + r.top;
+      var yPx = Math.round(topCss * dpr);
+
+      /* 高度按内容量：把内容临时挂到一个离屏容器里量真实高度 */
+      var hPx = contentHeight(card, g.w);
+
       invokeP("preview_show", {
         html: grabHtml(card),
         title: cardTitle(card),
-        x: g.x, y: g.y, w: g.w, h: g.h, onRight: g.onRight
-      }).catch(function(){});
+        x: g.x, y: yPx, w: g.w, h: hPx, onRight: g.onRight
+      }).then(startPoll).catch(function(){});
+    }
+
+    /* ---- 浮层常驻 ----
+       鼠标移进浮层后就不该被收掉（用户要在里面点东西）。
+       前端拿不到别的窗口里的鼠标位置，所以交给 Rust 的 preview_poll
+       判断：它每 220ms 看一次光标在不在预览窗矩形里，
+       在里面就「钉住」，直到光标离开才关。
+       这里只负责在浮层显示期间持续发 poll。 */
+    var pollTimer = null;
+    function startPoll(){
+      stopPoll();
+      pollTimer = setInterval(function(){
+        invokeP("preview_poll").catch(function(){});
+      }, 220);
+    }
+    function stopPoll(){
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    /* 量卡片内容展开后需要多高（物理像素）。
+       用一个和预览同宽的离屏容器渲染，避免影响页面布局。 */
+    function contentHeight(card, widthPx){
+      var dpr = window.devicePixelRatio || 1;
+      var probe = document.getElementById("__pvProbe");
+      if (!probe) {
+        probe = document.createElement("div");
+        probe.id = "__pvProbe";
+        probe.style.cssText = "position:fixed;left:-99999px;top:0;visibility:hidden;"
+          + "box-sizing:border-box;padding:12px 14px;font:12px/1.65 inherit;";
+        document.body.appendChild(probe);
+      }
+      var innerW = Math.max(200, widthPx / dpr - 28);   /* 减去左右 padding */
+      probe.style.width = innerW + "px";
+      probe.innerHTML = grabHtml(card);
+
+      var hCss = probe.scrollHeight + 24;               /* 加回上下 padding */
+      /* 夹在合理区间：太扁不好看，太高会顶出屏幕 */
+      var maxH = (window.screen && window.screen.availHeight ? window.screen.availHeight : 900) - 40;
+      hCss = Math.max(120, Math.min(hCss, maxH));
+      return Math.round(hCss * dpr);
     }
 
     function doHide(){
       curCard = null;
+      stopPoll();
       invokeP("preview_hide").catch(function(){});
     }
 
@@ -7044,11 +7092,15 @@
       }, 420);
     }
 
+    /* 离开卡片后**不立刻关**：先等 500ms。
+       这期间若鼠标进了浮层，Rust 的 poll 会把窗口钉住，
+       随后的 hide 请求会被它忽略，浮层就一直留着。
+       500ms 足够从卡片移到旁边的浮层，又不至于让浮层赖着不走。 */
     function scheduleHide(){
       hoverCard = null;
       if (showTimer) { clearTimeout(showTimer); showTimer = null; }
       if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 220);
+      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 500);
     }
 
     scrollEl.addEventListener("mouseover", function(ev){
@@ -7095,8 +7147,9 @@
     }, true);
 
     /* 鼠标离开整个窗口 = 一定收起 */
+    /* 鼠标离开侧边栏窗口时不直接关：可能正移向浮层。
+       由 Rust 的 poll 判断光标是否在浮层里，在外面才收。 */
     document.addEventListener("mouseleave", function(){ scheduleHide(); });
-    window.addEventListener("blur", function(){ scheduleHide(); });
 
     document.addEventListener("keydown", function(e){
       if (e.key === "Escape" && curCard) doHide();

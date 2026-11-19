@@ -24,6 +24,7 @@ fn main() {
             sidebar::preview_show,
             sidebar::preview_hide,
             sidebar::preview_payload,
+            sidebar::preview_poll,
             sidebar::move_sidebar,
             sidebar::show_main,
             sidebar::toggle_main,

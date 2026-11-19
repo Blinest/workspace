@@ -898,6 +898,8 @@ pub const PREVIEW_LABEL: &str = "preview";
 enum PvCmd {
     Show { html: String, title: String, x: i32, y: i32, w: i32, h: i32, on_right: bool },
     Hide,
+    /// 定时轮询：鼠标是否还在预览窗里
+    Poll,
 }
 
 /// 发往工作线程的 sender（None = 线程还没起来）
@@ -912,6 +914,22 @@ static PV_TX: Mutex<Option<std::sync::mpsc::Sender<PvCmd>>> = Mutex::new(None);
 /// 每次换新名字可以彻底绕开；关掉旧窗口也不再有 label 冲突。
 static PV_SEQ: AtomicU32 = AtomicU32::new(0);
 
+
+/// 鼠标当前是否落在给定矩形里（物理像素）
+fn pointer_inside(rect: Option<(i32, i32, i32, i32)>) -> bool {
+    let Some((l, t, r, b)) = rect else { return false };
+    #[repr(C)]
+    struct Pt { x: i32, y: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetCursorPos(p: *mut Pt) -> i32;
+    }
+    unsafe {
+        let mut p = Pt { x: 0, y: 0 };
+        if GetCursorPos(&mut p) == 0 { return false; }
+        p.x >= l && p.x <= r && p.y >= t && p.y <= b
+    }
+}
 /// 启动预览窗口的工作线程。在 setup 里调一次即可。
 pub fn spawn_preview_thread(app: AppHandle) {
     let (tx, rx) = std::sync::mpsc::channel::<PvCmd>();
@@ -923,12 +941,38 @@ pub fn spawn_preview_thread(app: AppHandle) {
             /* 所有窗口操作都在这个线程里做，不让 IPC 线程碰 */
             let mut cur: Option<(WebviewWindow, u32)> = None;
 
+            /* 预览窗当前的屏幕矩形（物理像素），供「鼠标在里面就别关」判断 */
+            let mut rect: Option<(i32, i32, i32, i32)> = None;
+            /* 鼠标进过预览窗就置真 —— 之后即使离开卡片也保持显示，
+               直到鼠标从预览窗移出才关 */
+            let mut pinned = false;
+
             while let Ok(cmd) = rx.recv() {
                 match cmd {
                     PvCmd::Hide => {
-                        /* 关掉而不是隐藏：label 用完就丢，下次换新的 */
+                        /* 关掉而不是隐藏：label 用完就丢，下次换新的。
+                           但如果鼠标正停在预览窗里，就先别关 —— 用户还要操作。 */
+                        if pinned && pointer_inside(rect) {
+                            continue;
+                        }
+                        pinned = false;
+                        rect = None;
                         if let Some((w, _)) = cur.take() {
                             let _ = w.destroy();
+                        }
+                    }
+                    PvCmd::Poll => {
+                        /* 只做一件事：鼠标离开预览窗后把 pin 解开，
+                           顺便把窗口收掉 */
+                        if cur.is_none() { continue; }
+                        if pointer_inside(rect) {
+                            pinned = true;
+                        } else if pinned {
+                            pinned = false;
+                            rect = None;
+                            if let Some((w, _)) = cur.take() {
+                                let _ = w.destroy();
+                            }
                         }
                     }
                     PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
@@ -947,8 +991,9 @@ pub fn spawn_preview_thread(app: AppHandle) {
                             }
                         }
 
-                        let pw = 360;
-                        let gap = 10;
+                        /* 宽度和侧边栏一致（不再是固定 360） */
+                        let pw = sw;
+                        let gap = 8;
                         let mut px = if on_right { x - pw - gap } else { x + sw + gap };
 
                         /* 自纠：跑出屏幕就翻到另一边 */
@@ -969,7 +1014,26 @@ pub fn spawn_preview_thread(app: AppHandle) {
                             }
                         }
 
-                        let h = h.max(120);
+                        /* 高度由前端按内容量出来（h 已经是物理像素）。
+                           夹在 140~屏幕高-24 之间，避免一两条内容时太扁、
+                           或者长列表顶出屏幕 */
+                        let max_h = app
+                            .available_monitors()
+                            .ok()
+                            .and_then(|ms| ms.into_iter().map(|m| m.size().height as i32).max())
+                            .unwrap_or(1600)
+                            - 24;
+                        let h = h.max(140).min(max_h.max(160));
+
+                        /* 顶部基准是卡片顶，但卡片往下滚时 y 可能超出屏幕
+                           —— 夹一下，保证整个浮层都在屏幕内 */
+                        let mon_top = app
+                            .available_monitors()
+                            .ok()
+                            .and_then(|ms| ms.into_iter().map(|m| m.position().y).min())
+                            .unwrap_or(0) as i32;
+                        let y = (y as i32).max(mon_top + 8);
+                        let y = y.min((mon_top + max_h - h).max(mon_top + 8));
                         /* 前端给的是物理像素，而 inner_size/position 用逻辑像素
                            —— 不分频的话 150% 缩放下窗口只有三分之二大 */
                         let sc = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
@@ -997,6 +1061,8 @@ pub fn spawn_preview_thread(app: AppHandle) {
                                 let _ = w.set_position(PhysicalPosition::new(px, y));
                                 let _ = w.set_size(PhysicalSize::new(pw as u32, h as u32));
                                 eprintln!("[preview] 已创建 {} @ ({},{}) {}x{}", label, px, y, pw, h);
+                                rect = Some((px, y, px + pw, y + h));
+                                pinned = false;
                                 cur = Some((w, seq));
                             }
                             Err(e) => eprintln!("[preview] 创建 {} 失败: {}", label, e),
@@ -1005,6 +1071,14 @@ pub fn spawn_preview_thread(app: AppHandle) {
                 }
             }
         });
+}
+
+/// 前端：轮询鼠标是否还在预览窗里
+#[tauri::command]
+pub fn preview_poll(_app: AppHandle) {
+    if let Some(t) = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        let _ = t.send(PvCmd::Poll);
+    }
 }
 
 /// 前端：显示预览
