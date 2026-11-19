@@ -672,30 +672,85 @@
   var nameEl = document.getElementById("name");
   var bodyEl = document.getElementById("body");
 
-  /* 内容由 Rust 写进 app_config_dir/preview-payload.json。
-     ⚠ 不走 URL 参数：卡片 HTML 上千字符，编码后 URL 超长会白屏。
-     ⚠ 不走 eval：WebView2 上 eval 会同步阻塞，hover 时界面卡。 */
+  function invoke(cmd, args){
+    try {
+      var iv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      return iv ? iv(cmd, args || {}) : Promise.reject(new Error("no invoke"));
+    } catch(e) { return Promise.reject(e); }
+  }
+
+  /* 渲染。内容由 Rust 写进 preview-payload.json。 */
   function render(payload){
     try {
       var p = typeof payload === "string" ? JSON.parse(payload) : payload;
       if (!p) return;
       nameEl.textContent = p.title || "预览";
       bodyEl.innerHTML = p.html || "";
+      bindActions();
     } catch(e) {
       bodyEl.textContent = "（内容解析失败）";
     }
   }
 
-  function loadOnce(){
-    try {
-      var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
-      if (!inv) { bodyEl.textContent = "（预览不可用）"; return; }
-      inv("preview_payload").then(render).catch(function(){
-        bodyEl.textContent = "（内容读取失败）";
-      });
-    } catch(e) {
-      bodyEl.textContent = "（预览不可用）";
+  /* ================= 交互转发 =================
+     预览里的元素是**拷贝**过来的，绑在原节点上的监听器不会跟过来。
+     所以这里把点击/改动抓下来，转成一条消息发给侧边栏，
+     由侧边栏在真实的卡片上复现同一个动作 —— 数据改的是同一份。
+
+     识别依据：侧边栏的按钮都带 data-act 和 data-ti / data-si。
+     ============================================ */
+
+  function findAction(el){
+    while (el && el !== bodyEl) {
+      if (el.getAttribute && el.getAttribute("data-act")) return el;
+      el = el.parentNode;
     }
+    return null;
+  }
+
+  function bindActions(){
+    if (bodyEl.__bound) return;
+    bodyEl.__bound = true;
+
+    /* 单击：把所有 data-* 属性一起带过去 */
+    bodyEl.addEventListener("click", function(ev){
+      var act = findAction(ev.target);
+      if (!act) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      var data = {};
+      Array.prototype.forEach.call(act.attributes, function(a){
+        if (a.name.indexOf("data-") === 0) data[a.name.slice(5)] = a.value;
+      });
+      invoke("preview_action", { kind: "click", data: data }).catch(function(){});
+    }, true);
+
+    /* 双击：编辑类动作 */
+    bodyEl.addEventListener("dblclick", function(ev){
+      var el = ev.target;
+      var act = el.getAttribute && el.getAttribute("data-edit");
+      if (!act) return;
+      ev.preventDefault();
+      invoke("preview_action", {
+        kind: "edit",
+        data: { edit: act, text: (el.textContent || "").trim() }
+      }).catch(function(){});
+    }, true);
+
+    /* 勾选框类：click 已经能覆盖；这里只挡掉默认行为避免状态闪回 */
+    bodyEl.addEventListener("mousedown", function(ev){
+      if (ev.target && ev.target.tagName === "INPUT") {
+        /* 让 click 统一处理 */
+        ev.preventDefault();
+      }
+    }, true);
+  }
+
+  function loadOnce(){
+    /* ⚠ 不走 URL 参数（HTML 太长会白屏）、也不走 eval（会阻塞） */
+    invoke("preview_payload").then(render).catch(function(){
+      bodyEl.textContent = "（内容读取失败）";
+    });
   }
 
   window.__renderPreview = render;
@@ -703,5 +758,6 @@
   setTimeout(loadOnce, 220);
 })();
 </script>
+
 </body>
 </html>

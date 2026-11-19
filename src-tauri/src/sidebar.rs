@@ -1073,6 +1073,18 @@ pub fn spawn_preview_thread(app: AppHandle) {
         });
 }
 
+/// 预览窗口里的点击/改动，转发给侧边栏去执行。
+///
+/// 预览里的 DOM 是从卡片拷贝出来的**副本**，原来绑的监听器不会跟过来。
+/// 所以点一下就把动作原样发回去，由侧边栏在真实卡片上复现 ——
+/// 数据改的是同一份，切回去能看到变化。
+#[tauri::command]
+pub fn preview_action(app: AppHandle, kind: String, data: serde_json::Value) {
+    use tauri::Emitter;
+    let payload = serde_json::json!({ "kind": kind, "data": data });
+    let _ = app.emit_to(LABEL, "preview-action", payload);
+}
+
 /// 前端：轮询鼠标是否还在预览窗里
 #[tauri::command]
 pub fn preview_poll(_app: AppHandle) {

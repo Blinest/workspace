@@ -7155,6 +7155,57 @@
       if (e.key === "Escape" && curCard) doHide();
     });
 
+    /* ================= 预览里的操作转发回来 =================
+       预览窗口里点按钮，Rust 会 emit 一个 "preview-action" 事件。
+       这里在真实卡片上复现同一个动作 —— 数据改的是同一份，
+       改完刷新一下预览，让它显示最新状态。
+       ======================================================== */
+    (function(){
+      /* withGlobalTauri 打开后，事件 API 在 window.__TAURI__.event 上 */
+      function listenPreview(handler){
+        try {
+          var ev = window.__TAURI__ && window.__TAURI__.event;
+          if (ev && ev.listen) { ev.listen("preview-action", handler); return; }
+        } catch(e){}
+        /* 兜底：还没注入就等一会儿再试 */
+        setTimeout(function(){
+          try {
+            var ev2 = window.__TAURI__ && window.__TAURI__.event;
+            if (ev2 && ev2.listen) ev2.listen("preview-action", handler);
+          } catch(e){}
+        }, 800);
+      }
+
+      listenPreview(function(ev){
+        var p = ev && ev.payload ? ev.payload : ev;
+        if (!p) return;
+        var kind = p.kind;
+        var d = p.data || {};
+
+        try {
+          if (kind === "click" && d.act) {
+            var ti = d.ti != null ? +d.ti : null;
+            var si = d.si != null ? +d.si : null;
+            if (ti != null && !isNaN(ti)) {
+              /* 侧边栏所有卡片按钮统一走这个入口 */
+              doTaskAction(ti, d.act, si);
+            }
+            if (d.act === "toggle" && d.card) {
+              var bt = document.querySelector('.cardToggle[data-card-toggle="' + d.card + '"]');
+              if (bt) bt.click();
+            }
+          }
+        } catch(e) {
+          console.error("preview action failed:", e);
+        }
+
+        /* 动作执行完刷新预览，让浮层显示最新数据 */
+        setTimeout(function(){
+          if (curCard) doShow(curCard);
+        }, 260);
+      });
+    })();
+
   })();
 
 
