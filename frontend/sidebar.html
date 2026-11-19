@@ -1660,6 +1660,18 @@
     /* 正在编辑（双击改文字）时不要重建 DOM —— 重建会销毁编辑中的元素，
        触发 blur 把用户打的字提交成旧值。改动会在 finish() 之后自己刷。 */
     if (editGuard) return;
+
+    /* 重绘期间别的代码（自动推送）不要来抓 DOM —— 会抓到中间态 */
+    window.__repainting = true;
+    try {
+      return renderTodosInner(force);
+    } finally {
+      /* 留一小段缓冲，等浏览器把 DOM 真正摆好 */
+      setTimeout(function(){ window.__repainting = false; }, 80);
+    }
+  }
+
+  function renderTodosInner(force){
     var _inpSnap = snapshotInputs();
     var raw = null;
     try { raw = JSON.parse(localStorage.getItem(TODOS_KEY) || "null"); } catch(e){}
@@ -7447,6 +7459,13 @@
       var detail = card.querySelector(".todoDetail") || card.querySelector(".dbDetail") || card.querySelector(".docDetail");
       var src = detail || card;
 
+      /* 空状态保护：todoBody 里只有一句「还没有今日待办」时不要抓，
+         否则浮层会显示成空的。 */
+      var txt = (src.textContent || "").trim();
+      if (txt.indexOf("还没有今日待办") === 0 || txt.indexOf("读取中") === 0) {
+        return "";
+      }
+
       var box = document.createElement("div");
       Array.prototype.forEach.call(src.children, function(ch){
         if (ch.tagName === "H3") return;
@@ -7867,6 +7886,8 @@
 
     function push(){
       if (busy) { window.__pushSkip++; return; }
+      /* 侧边栏正在重绘：此刻 DOM 是中间态，等下一轮 */
+      if (window.__repainting) { window.__pushSkip++; return; }
       try {
         var card = window.__curCardRef ? window.__curCardRef() : null;
         if (!card) return;
