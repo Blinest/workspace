@@ -783,6 +783,15 @@
   .empty code{ background:#f3f0e5; border:0.9px solid var(--line); border-radius:3.8px; padding:0 3.8px; font-size:10.4px; }
   .foot{ flex:none; border-top:0.9px solid var(--line); padding:5.7px 11.4px; font-size:10.0px; color:#4a453d; }
 
+  /* 原地编辑时的视觉提示 */
+  .pvEditing{
+    outline: 2px solid rgba(217,160,21,.55);
+    outline-offset: 1px;
+    border-radius: 3px;
+    background: rgba(255,253,247,.95);
+    cursor: text;
+  }
+
 </style>
 </head>
 <body>
@@ -997,7 +1006,66 @@
       }
     }, true);
 
-    /* ---------- 双击：改名字 ---------- */
+    /* ---------- 双击：**原地编辑** ----------
+       以前双击弹一个输入框让用户确认，多一步操作。
+       现在直接把那个元素变成可编辑，回车 / 失焦即提交，Esc 取消。
+       和侧边栏卡片里的双击行为一致。 */
+    var editingEl = null;
+    var editingOrig = "";
+
+    function beginEdit(el, commit){
+      if (editingEl === el) return;
+      if (editingEl) cancelEdit();
+
+      editingEl = el;
+      editingOrig = (el.textContent || "").trim();
+      el.setAttribute("contenteditable", "true");
+      el.classList.add("pvEditing");
+      el.focus();
+
+      /* 全选，方便直接重打 */
+      try {
+        var r = document.createRange();
+        r.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+      } catch(e){}
+
+      function finish(ok){
+        if (editingEl !== el) return;
+        el.removeEventListener("keydown", onKey);
+        el.removeEventListener("blur", onBlur);
+        el.setAttribute("contenteditable", "false");
+        el.classList.remove("pvEditing");
+        editingEl = null;
+
+        var now = (el.textContent || "").trim();
+        if (!ok || now === editingOrig) {
+          el.textContent = editingOrig;    /* 取消或没改：还原 */
+          return;
+        }
+        commit(now);
+      }
+      function onKey(e2){
+        if (e2.key === "Enter") { e2.preventDefault(); e2.stopPropagation(); finish(true); }
+        else if (e2.key === "Escape") { e2.preventDefault(); e2.stopPropagation(); finish(false); }
+      }
+      function onBlur(){ finish(true); }
+
+      el.addEventListener("keydown", onKey);
+      el.addEventListener("blur", onBlur);
+    }
+
+    function cancelEdit(){
+      if (!editingEl) return;
+      var el = editingEl;
+      editingEl = null;
+      el.setAttribute("contenteditable", "false");
+      el.classList.remove("pvEditing");
+      el.textContent = editingOrig;
+    }
+
     bodyEl.addEventListener("dblclick", function(ev){
       var t = ev.target;
       if (!t || !t.getAttribute) return;
@@ -1007,9 +1075,7 @@
         ev.preventDefault();
         ev.stopPropagation();
         var key = sub.getAttribute("data-edit-sub");
-        var cur = (sub.textContent || "").trim();
-        askText("修改步骤内容：", cur).then(function(v){
-          if (v === null || v === cur) return;
+        beginEdit(sub, function(v){
           send("editSub", { key: key, text: v });
         });
         return;
@@ -1020,16 +1086,30 @@
         ev.preventDefault();
         ev.stopPropagation();
         var key2 = nm.getAttribute("data-edit");
-        var cur2 = (nm.textContent || "").trim();
-        askText("修改任务名：", cur2).then(function(v2){
-          if (v2 === null || v2 === cur2) return;
+        beginEdit(nm, function(v2){
           send("editName", { key: key2, text: v2 });
         });
       }
     }, true);
 
+    /* 编辑中的元素不要被「重渲染」冲掉：
+       刷新内容时如果正在编辑，就把编辑状态记下来，渲染后恢复 */
+    window.__editingKey = function(){
+      if (!editingEl) return null;
+      return editingEl.getAttribute("data-edit-sub") || editingEl.getAttribute("data-edit") || null;
+    };
+
     /* 输入框保持可用，但别让浏览器默认提交 */
     bodyEl.addEventListener("submit", function(ev){ ev.preventDefault(); }, true);
+
+    /* ---- 搜索框输入 ----
+       预览是独立窗口，它这里没有侧边栏的 DOM，
+       所以把输入内容发给侧边栏去过滤。 */
+    bodyEl.addEventListener("input", function(ev){
+      var t = ev.target;
+      if (!t || !t.classList || !t.classList.contains("pvDbSearch")) return;
+      send("dbSearch", { q: t.value });
+    }, true);
   }
 
   var _lastRaw = "";

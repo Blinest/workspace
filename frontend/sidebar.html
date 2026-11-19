@@ -7770,6 +7770,23 @@
             if (t6 && d.text) { t6.name = String(d.text); changed = true; }
           }
 
+          /* ---- 浮层里的搜索 ----
+             直接把关键词拿到侧边栏过滤，再推新内容回浮层 */
+          else if (kind === "dbSearch") {
+            dbQuery = String(d.q || "");
+            var qEl = $("dbQ");
+            if (qEl) qEl.value = dbQuery;
+            try { paintDb(); } catch(e){}
+            setTimeout(function(){
+              if (!curCard) return;
+              invokeP("preview_update", {
+                html: grabHtml(curCard),
+                title: cardTitle(curCard)
+              }).catch(function(){});
+            }, 100);
+            return;
+          }
+
           /* ---- 数据库展开 / 折叠 ---- */
           else if (kind === "dbToggle") {
             if (d.kind === "nb") {
@@ -7832,16 +7849,29 @@
      靠比较 HTML 签名避免无谓推送。 */
   (function(){
     var lastSig = "";
+    var pushing = false;          /* 防止上一次没返回就再推 */
     function push(){
+      if (pushing) return;
       try {
         if (!window.__curCardRef) return;
         var card = window.__curCardRef();
         if (!card) return;
         var h = window.__grabHtmlRef ? window.__grabHtmlRef(card) : "";
         if (!h) return;
-        var sig = h.length + "|" + h.slice(0, 200) + "|" + h.slice(-200);
+
+        /* 去掉时间、相对时长这类每次都变的数字，再算签名 ——
+           否则签名永远对不上，每 400ms 就推一次，把界面拖死。 */
+        var norm = h
+          .replace(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?/g, "T")
+          .replace(/\d{2}-\d{2}\s+\d{2}:\d{2}/g, "T")
+          .replace(/\d{2}:\d{2}(:\d{2})?/g, "T")
+          .replace(/\s+/g, " ");
+        var sig = norm.length + "|" + norm.slice(0, 300) + "|" + norm.slice(-300);
         if (sig === lastSig) return;      /* 没变就不推 */
         lastSig = sig;
+
+        pushing = true;
+        setTimeout(function(){ pushing = false; }, 700);
         var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
         if (!inv) return;
         var title = window.__cardTitleRef ? window.__cardTitleRef(card) : "预览";
