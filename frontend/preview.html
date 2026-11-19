@@ -1113,11 +1113,13 @@
   }
 
   var _lastRaw = "";
+  window.__renderCount = 0;
 
   function loadOnce(){
     invoke("preview_payload").then(function(txt){
       _lastRaw = txt || "";
       render(txt);
+      window.__renderCount++;
     }).catch(function(){
       bodyEl.textContent = "（内容读取失败）";
     });
@@ -1136,19 +1138,24 @@
      要关掉重开才更新」。
      这里改成自己每 320ms 读一次 payload 文件，内容变了就重渲染。
      payload 只有几 KB，开销可以忽略。 */
+  var _polling = false;
   function pollPayload(){
+    if (_polling) return;              /* 上一次还没回来就跳过 */
+    _polling = true;
     try {
       var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
-      if (!inv) return;
+      if (!inv) { _polling = false; return; }
       inv("preview_payload").then(function(txt){
+        _polling = false;
         if (!txt) return;
-        if (txt === _lastRaw) return;      /* 没变就不动 */
+        if (txt === _lastRaw) return;    /* 没变就不动 */
         _lastRaw = txt;
         render(txt);
-      }).catch(function(){});
-    } catch(e){}
+        window.__renderCount++;
+      }).catch(function(){ _polling = false; });
+    } catch(e) { _polling = false; }
   }
-  setInterval(pollPayload, 320);
+  setInterval(pollPayload, 250);
 })();
 </script>
 

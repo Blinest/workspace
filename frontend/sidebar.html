@@ -7506,6 +7506,8 @@
       var h3 = card.querySelector("h3");
       if (!h3) return;
       curCard = card;
+      /* 清空推送签名：让自动推送在浮层打开后立即生效 */
+      try { if (window.__resetPushSig) window.__resetPushSig(); } catch(e){}
       var g = sideGeom();
       var dpr = window.devicePixelRatio || 1;
 
@@ -7844,41 +7846,52 @@
 
 
   /* ================= 预览内容自动推送 =================
-     只要数据有变化（不管是预览里点的、还是侧边栏自己点的），
-     就把最新内容推给已经开着的预览窗。
-     靠比较 HTML 签名避免无谓推送。 */
+     只要数据有变化（预览里点的、侧边栏点的、后台轮询进来的），
+     就把最新内容推给开着的预览窗。
+     用「归一化后的 HTML 签名」比对，避免无谓推送。 */
   (function(){
     var lastSig = "";
-    var pushing = false;          /* 防止上一次没返回就再推 */
+    var busy = false;
+    window.__pushCount = 0;
+    window.__pushSkip = 0;
+
+    function sigOf(h){
+      /* 抹掉时间、相对时长这类每次都变的数字，否则签名永远对不上 */
+      var norm = String(h)
+        .replace(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?/g, "T")
+        .replace(/\d{2}-\d{2}\s+\d{2}:\d{2}/g, "T")
+        .replace(/\d{2}:\d{2}(:\d{2})?/g, "T")
+        .replace(/\s+/g, " ");
+      return norm.length + "|" + norm.slice(0, 300) + "|" + norm.slice(-300);
+    }
+
     function push(){
-      if (pushing) return;
+      if (busy) { window.__pushSkip++; return; }
       try {
-        if (!window.__curCardRef) return;
-        var card = window.__curCardRef();
+        var card = window.__curCardRef ? window.__curCardRef() : null;
         if (!card) return;
         var h = window.__grabHtmlRef ? window.__grabHtmlRef(card) : "";
         if (!h) return;
 
-        /* 去掉时间、相对时长这类每次都变的数字，再算签名 ——
-           否则签名永远对不上，每 400ms 就推一次，把界面拖死。 */
-        var norm = h
-          .replace(/\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?/g, "T")
-          .replace(/\d{2}-\d{2}\s+\d{2}:\d{2}/g, "T")
-          .replace(/\d{2}:\d{2}(:\d{2})?/g, "T")
-          .replace(/\s+/g, " ");
-        var sig = norm.length + "|" + norm.slice(0, 300) + "|" + norm.slice(-300);
-        if (sig === lastSig) return;      /* 没变就不推 */
+        var sig = sigOf(h);
+        if (sig === lastSig) return;
         lastSig = sig;
 
-        pushing = true;
-        setTimeout(function(){ pushing = false; }, 700);
         var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
         if (!inv) return;
+
+        busy = true;
         var title = window.__cardTitleRef ? window.__cardTitleRef(card) : "预览";
-        inv("preview_update", { html: h, title: title }).catch(function(){});
-      } catch(e){}
+        window.__pushCount++;
+        inv("preview_update", { html: h, title: title })
+          .then(function(){ busy = false; })
+          .catch(function(){ busy = false; });
+      } catch(e){ busy = false; }
     }
-    /* 每 400ms 检查一次：有开着的浮层且内容变了就推 */
+
+    /* 浮层一打开就把 lastSig 清空，保证第一次一定推 */
+    window.__resetPushSig = function(){ lastSig = ""; };
+
     setInterval(push, 400);
   })();
 
