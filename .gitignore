@@ -41,3 +41,18 @@ desktop.ini
 # ---------- 测试产物 ----------
 /tmp/
 /screenshots/
+
+# ---------- 演示与推广素材（一律不入库）----------
+# 仓库只放代码和 README。截图、演示视频、宣传图、
+# 以及小红书/B站等平台的运营文案都放在仓库外的
+# 「工作台-推广素材」目录里，不随代码分发。
+/docs/
+/frames/
+/*.frames/
+/scripts/make-promo.py
+/scripts/make-video.sh
+/scripts/make-cards.py
+/scripts/compress-shots.py
+*.gif
+*.mp4
+*.webm

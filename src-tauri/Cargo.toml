@@ -1,6 +1,6 @@
 [package]
 name = "siyuan-research-worktable"
-version = "0.0.4"
+version = "0.0.6"
 description = "思源科研工作台 - 把思源笔记变成可查询、可统计、可导出的科研工作台"
 edition = "2021"
 rust-version = "1.77.2"
