@@ -718,7 +718,7 @@
   <span class="sp" data-tauri-drag-region></span>
   <button id="btnRefresh" title="刷新">↻</button>
   <button id="btnOpenMain" class="hdOpen" title="显示 / 隐藏工作台主界面">⤢ 工作台</button>
-  <button id="btnHide" title="收起侧边栏（Ctrl+Alt+Space 或 Esc）">✕</button>
+  <button id="btnHide" title="收起侧边栏（Esc）">✕</button>
 </div>
 
 <div class="scroll" id="scroll">
@@ -785,7 +785,7 @@
   </div>
 </div>
 
-<div class="foot">Ctrl+Alt+Space 收起 · 数据只在本机</div>
+<div class="foot"><span id="footHk">Ctrl+Alt+Space</span> 收起 · 数据只在本机</div>
 
 <script>
 (function(){
@@ -6192,6 +6192,41 @@
     } catch(e){}
   }
   $("btnHide").addEventListener("click", hide);
+
+  /* ---------- 底部提示里的快捷键 ----------
+     主窗口「设置 → 侧边栏」可以改全局快捷键，这里要跟着变，
+     否则底部还写着 Ctrl+Alt+Space，用户按了没反应。
+     两个来源：
+       ① 启动时向 Rust 要一次当前值（get_hotkey）
+       ② 主窗口改完后写 localStorage，storage 事件即时更新 */
+  var HK_CACHE = "dsh.worktable.hotkey.v1";
+  function paintHotkey(text){
+    var t = String(text || "").trim();
+    if (!t) return;
+    var el = document.getElementById("footHk");
+    if (el) el.textContent = t;
+    var bh = document.getElementById("btnHide");
+    if (bh) bh.title = "收起侧边栏（Esc）";
+  }
+  function refreshHotkey(){
+    try {
+      var cached = localStorage.getItem(HK_CACHE);
+      if (cached) paintHotkey(cached);
+    } catch(e){}
+    try {
+      var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      if (inv) {
+        inv("get_hotkey").then(function(t){
+          paintHotkey(t);
+          try { localStorage.setItem(HK_CACHE, t); } catch(e){}
+        }).catch(function(){});
+      }
+    } catch(e){}
+  }
+  refreshHotkey();
+  window.addEventListener("storage", function(e){
+    if (e.key === HK_CACHE && e.newValue) paintHotkey(e.newValue);
+  });
 
   /* ---------- 工作台主界面开关 ----------
      按钮是**开关**，不是单向的「打开」：
