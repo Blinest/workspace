@@ -382,6 +382,18 @@
     font-size:11.5px; color:#7bb37b; padding:4px 0;
   }
 
+  /* 数据库浮层里的搜索框 */
+  .dbSearchWrap{ margin-bottom:8px; }
+  .dbDetail .pvDbSearch{
+    width:100%; box-sizing:border-box;
+    padding:5px 9px; font:11.5px/1.6 inherit; font-family:inherit;
+    border:1px solid rgba(200,190,170,.8); border-radius:6px;
+    background:#fffdf7; color:var(--ink); outline:none;
+  }
+  .dbDetail .pvDbSearch:focus{
+    border-color:#d9a015; box-shadow:0 0 0 2px rgba(217,160,21,.14);
+  }
+
   /* ---- 文档检索：折叠看摘要，展开看完整 ----
      折叠态：总文档、总字数、今天在编辑的几篇
      展开态：完整明细 */
@@ -1050,7 +1062,9 @@
 
   <div class="card" id="cardDb">
     <h3>数据库汇总 <span class="mini" id="dbAt"></span></h3>
-    <input id="dbQ" class="searchBox" placeholder="搜索数据库 / 笔记本 / 列名…" />
+    <!-- 搜索框已移到悬停浮层里：卡片只留数据总量。
+         元素保留（逻辑要用），只是不显示。 -->
+    <input id="dbQ" class="searchBox" placeholder="搜索数据库 / 笔记本 / 列名…" style="display:none" />
     <div id="dbBody" class="empty">读取中…</div>
   </div>
 
@@ -1833,18 +1847,25 @@
           if (cur) return;
           if (!li.classList.contains("done")) cur = li;
         });
-        var curEl = document.createElement("div");
-        curEl.className = "briefCur";
+        /* 当前步骤：取不到文字就**不显示这一行** ——
+           以前会留一个空的「▸」，看着像渲染坏了。 */
+        var curTxt = "";
         if (cur) {
           var txt = cur.querySelector(".subTxt");
-          curEl.textContent = txt ? (txt.textContent || "").trim() : "";
-        } else {
-          /* 步骤全做完了（但任务没标完成）—— 给个明确提示，
-             不要留一个空箭头让人以为坏了 */
-          curEl.textContent = "步骤已全部完成，可以勾掉这条了";
-          curEl.classList.add("curDone");
+          curTxt = txt ? (txt.textContent || "").trim() : "";
         }
-        row.appendChild(curEl);
+        if (curTxt) {
+          var curEl = document.createElement("div");
+          curEl.className = "briefCur";
+          curEl.textContent = curTxt;
+          row.appendChild(curEl);
+        } else if (!cur) {
+          /* 没有未完成步骤：说明步骤都做完了但任务没勾 */
+          var doneEl = document.createElement("div");
+          doneEl.className = "briefCur curDone";
+          doneEl.textContent = "步骤已全部完成，可以勾掉这条了";
+          row.appendChild(doneEl);
+        }
 
         list.appendChild(row);
       });
@@ -3471,7 +3492,33 @@
     (function(){
       var detail = document.createElement("div");
       detail.className = "dbDetail";
-      detail.innerHTML = h;
+
+      /* 浮层里的搜索框：显示在详情顶部。
+         输入时同步到主搜索框并触发过滤，结果实时反映下面的列表。 */
+      var searchWrap = document.createElement("div");
+      searchWrap.className = "dbSearchWrap";
+      var si = document.createElement("input");
+      si.type = "text";
+      si.className = "searchBox pvDbSearch";
+      si.placeholder = "搜索数据库 / 笔记本 / 列名…";
+      si.value = dbQuery || "";
+      si.addEventListener("input", function(){
+        dbQuery = si.value;
+        var q = $("dbQ");
+        if (q) q.value = si.value;
+        paintDb();
+        /* 重绘后搜索框会被重建，把焦点和光标位置还回来 */
+        setTimeout(function(){
+          var again = document.querySelector("#cardDb .pvDbSearch");
+          if (again && document.activeElement !== again) {
+            again.focus();
+            try { again.setSelectionRange(again.value.length, again.value.length); } catch(e){}
+          }
+        }, 30);
+      });
+      searchWrap.appendChild(si);
+      detail.appendChild(searchWrap);
+      detail.insertAdjacentHTML("beforeend", h);
 
       var brief = document.createElement("div");
       brief.className = "dbBrief";
@@ -3485,27 +3532,8 @@
         + '<div><b>' + fmtNum(total) + '</b><span>数据行</span></div>'
         + '</div>';
 
-      /* 标签不再放精简卡（和预览卡重复了），挪到详情顶部 */
-      var byNb = {};
-      list.forEach(function(d){
-        var k = d.nb || "未分类";
-        if (!byNb[k]) byNb[k] = { n: 0, rows: 0 };
-        byNb[k].n++;
-        byNb[k].rows += (d.rows || []).length;
-      });
-      var names = Object.keys(byNb);
-      if (names.length) {
-        var chips = '<div class="chips dbTagChips">' + names.map(function(k, idx){
-          var col = NB_COLORS[idx % NB_COLORS.length];
-          return '<span class="chip dbTag" style="--tc:' + col + '" title="' + esc(k) + '">'
-            + '<b class="dbTagDot"></b>' + esc(k)
-            + '<i>' + byNb[k].n + ' 库 · ' + byNb[k].rows + ' 行</i></span>';
-        }).join("") + '</div>';
-        /* 插到 detail 最前面 */
-        var wrap = document.createElement("div");
-        wrap.innerHTML = chips;
-        detail.insertBefore(wrap.firstChild, detail.firstChild);
-      }
+      /* 标签（每个笔记本的彩色 chip）已按需求全部去掉 ——
+         精简卡和详情卡里都不再显示，只保留数据总量和分组列表。 */
 
       body.innerHTML = "";
       body.appendChild(brief);
@@ -7536,6 +7564,11 @@
       return Math.round(hCss * dpr);
     }
 
+    /* 给上面的「自动推送」用 */
+    window.__curCardRef = function(){ return curCard; };
+    window.__grabHtmlRef = grabHtml;
+    window.__cardTitleRef = cardTitle;
+
     function doHide(){
       curCard = null;
       stopPoll();
@@ -7792,6 +7825,32 @@
 
   })();
 
+
+  /* ================= 预览内容自动推送 =================
+     只要数据有变化（不管是预览里点的、还是侧边栏自己点的），
+     就把最新内容推给已经开着的预览窗。
+     靠比较 HTML 签名避免无谓推送。 */
+  (function(){
+    var lastSig = "";
+    function push(){
+      try {
+        if (!window.__curCardRef) return;
+        var card = window.__curCardRef();
+        if (!card) return;
+        var h = window.__grabHtmlRef ? window.__grabHtmlRef(card) : "";
+        if (!h) return;
+        var sig = h.length + "|" + h.slice(0, 200) + "|" + h.slice(-200);
+        if (sig === lastSig) return;      /* 没变就不推 */
+        lastSig = sig;
+        var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+        if (!inv) return;
+        var title = window.__cardTitleRef ? window.__cardTitleRef(card) : "预览";
+        inv("preview_update", { html: h, title: title }).catch(function(){});
+      } catch(e){}
+    }
+    /* 每 400ms 检查一次：有开着的浮层且内容变了就推 */
+    setInterval(push, 400);
+  })();
 
   refresh();
 })();

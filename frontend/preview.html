@@ -164,23 +164,173 @@
        · 标题右侧的 ⌄ 按钮 → 同上，点一下即知当前状态
      ============================================ */
   
-  .scroll > .card::-webkit-scrollbar{ width:5.7px; }
-  .scroll > .card::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.3); border-radius:2.8px; }
-  .scroll > .card::-webkit-scrollbar-track{ background:transparent; }
 
-  /* 番茄钟内容少，给个更矮的上限 */
-  .scroll > .card#cardPomo{ max-height:none; overflow:hidden; }
-
-  /* ---- 折叠态 ---- */
+  /* 折叠态：只留标题行 */
   .scroll > .card.isCollapsed{
     max-height:46px; overflow:hidden;
   }
   .scroll > .card.isCollapsed > :not(h3){ display:none !important; }
 
-  /* ---- 展开态（双击 / 点按钮）---- */
+  /* 展开态：内容全部铺开，不设高度上限、不出滚动条 */
   .scroll > .card.isExpanded{
-    max-height:420px; overflow-y:auto;
+    max-height:none; overflow:visible;
   }
+
+  /* ---- 卡片两种视图 ----
+     折叠态（默认）：只显示 .todoBrief —— 分数栏 + 所有待办名 + 当前步骤
+     展开态（双击标题）：显示 .todoDetail —— 完整明细
+     两者互斥，靠卡片上的 isExpanded 类切换。
+     悬停浮层抓的始终是 .todoDetail（完整版）。 */
+  /* 折叠态：连摘要也不显示，只剩标题 */
+  .scroll > .card.isCollapsed .todoBrief{ display:none !important; }
+  /* 摘要只在「既不折叠也不展开」时出现 */
+  .scroll > .card.isCollapsed .todoDetail,
+  .scroll > .card:not(.isExpanded) .todoDetail{ display:none !important; }
+  .scroll > .card.isExpanded .todoBrief{ display:none !important; }
+
+  .todoBrief{ font-size:11.4px; }
+  .todoBrief .score{ margin-bottom:5.7px; }
+  .todoBrief .briefList{ margin-top:7.6px; display:flex; flex-direction:column; gap:4.8px; }
+  /* 精简卡的一行待办：两行排布
+       第 1 行  优先级色点 + 待办名
+       第 2 行  当前在做的步骤（换行，缩进对齐） */
+  .briefRow{
+    display:flex; flex-direction:column; gap:1.9px;
+    padding:4.8px 0; line-height:1.45;
+  }
+  .briefLine1{
+    display:flex; align-items:center; gap:6.6px; min-width:0;
+  }
+  .briefDot{
+    flex:none; width:6.6px; height:6.6px; border-radius:50%;
+    background:#c9b98f;
+  }
+  /* 优先级配色：红 > 橙 > 琥珀 > 绿 */
+  .briefRow.p1 .briefDot{ background:#e05252; box-shadow:0 0 0 1.9px rgba(224,82,82,.16); }
+  .briefRow.p2 .briefDot{ background:#e8863a; box-shadow:0 0 0 1.9px rgba(232,134,58,.16); }
+  .briefRow.p3 .briefDot{ background:#d9a015; box-shadow:0 0 0 1.9px rgba(217,160,21,.16); }
+  .briefRow.p4 .briefDot{ background:#4caf6e; box-shadow:0 0 0 1.9px rgba(76,175,110,.16); }
+
+  .briefRow.p1 .briefName{ color:#b83a3a; }
+  .briefRow.p2 .briefName{ color:#a95f21; }
+  .briefRow.p3 .briefName{ color:#8a6a10; }
+  .briefRow.p4 .briefName{ color:#2f7a4f; }
+
+  .briefName{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-weight:600;
+  }
+  /* 第二行：当前步骤，缩进到和待办名对齐 */
+  .briefCur{
+    padding-left:13.3px;
+    color:var(--sub); font-size:10.9px; line-height:1.5;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .briefCur::before{ content:"▸ "; color:#c9b98f; }
+
+  .briefCur.curDone{ color:#7bb37b; }
+  /* 其余未完成项：列名字，带同色小点 */
+  .briefRest{ margin-top:5.7px; }
+  .briefRestHead{
+    font-size:9.5px; color:#b9b2a3; margin-bottom:2.8px; padding-left:1.9px;
+  }
+  .briefRestItem{
+    display:flex; align-items:center; gap:5.7px;
+    padding:1.9px 0; font-size:10.9px;
+  }
+  .briefRestItem .briefDot.sm{ width:4.8px; height:4.8px; box-shadow:none; }
+  .briefRestName{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--sub);
+  }
+  .briefRestItem.p1 .briefRestName{ color:#b83a3a; }
+  .briefRestItem.p2 .briefRestName{ color:#a95f21; }
+  .briefRestItem.p3 .briefRestName{ color:#8a6a10; }
+  .briefRestItem.p4 .briefRestName{ color:#2f7a4f; }
+  .briefEmpty{
+    font-size:10.9px; color:#7bb37b; padding:3.8px 0;
+  }
+
+  /* ---- 文档检索：折叠看摘要，展开看完整 ----
+     折叠态：总文档、总字数、今天在编辑的几篇
+     展开态：完整明细 */
+  .scroll > .card:not(.isExpanded) .docDetail{ display:none !important; }
+
+  .docToday{ margin-top:7.6px; }
+  .docTopHead{
+    font-size:10.0px; color:#b9b2a3; margin-bottom:2.8px;
+  }
+  .docTopRow{
+    display:flex; align-items:baseline; gap:7.6px;
+    font-size:11.4px; padding:3.8px 0;
+    border-top:0.9px dashed rgba(226,214,186,.7);
+  }
+  .docTopNm{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--ink); font-weight:600;
+  }
+  .docTopWc{
+    flex:none; color:#1B365D; font-weight:700; font-size:10.9px;
+  }
+  .docEmpty{ font-size:10.9px; color:#b9b2a3; font-style:italic; }
+
+  /* 详情卡：文档名加粗、编辑时间、字数右对齐 */
+  .docList{ display:flex; flex-direction:column; }
+  .docItem{
+    display:flex; align-items:baseline; gap:7.6px;
+    padding:4.8px 0; border-bottom:0.9px dashed rgba(226,214,186,.55);
+    font-size:10.9px;
+  }
+  .docItem:last-child{ border-bottom:none; }
+  .docItemNm{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-weight:700; color:var(--ink);
+  }
+  .docItemTime{
+    flex:none; font-size:10.0px; color:#b9b2a3;
+    font-variant-numeric:tabular-nums;
+  }
+  .docItemWc{
+    flex:none; min-width:56px; text-align:right;
+    color:#1B365D; font-weight:700;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .docDetailHead{
+    font-size:10.4px; color:var(--sub); margin:1.9px 0 5.7px;
+    padding-bottom:4.8px; border-bottom:0.9px dashed rgba(226,214,186,.7);
+  }
+
+  /* 数据库：折叠看总量+标签，展开看完整 */
+  .scroll > .card:not(.isExpanded) .dbDetail{ display:none !important; }
+  .scroll > .card.isCollapsed .dbBrief{ display:none !important; }
+  .dbTagChips{ margin-top:7.6px; }
+  /* 数据库标签：彩色。
+     --tc 是每个笔记本自己的颜色（见 NB_COLORS），
+     色点用实色、边框和底用同色低透明度，文字略深。 */
+  .dbTagChips .chip.dbTag{
+    display:inline-flex; align-items:center; gap:4.8px;
+    font-size:10.0px; padding:1.9px 7.6px 1.9px 5.7px;
+    border:0.9px solid var(--tc, #c9b98f);
+    background:color-mix(in srgb, var(--tc, #c9b98f) 11%, transparent);
+    color:var(--tc, #6b6558);
+    border-radius:20px;
+  }
+  .dbTagChips .chip.dbTag b.dbTagDot{
+    flex:none; width:5.7px; height:5.7px; border-radius:50%;
+    background:var(--tc, #c9b98f);
+  }
+  .dbTagChips .chip.dbTag i{
+    color:var(--tc, #8a8478); opacity:.78; font-style:normal;
+  }
+
+  /* 今日执行力：精简卡只留数字（完成率 / 步骤分 / 效率 / 用时），
+     整块提示列表（.wkTodayTips）都收进展开态和悬停浮层。 */
+  .scroll > .card:not(.isExpanded) .wkTodayTips{ display:none !important; }
 
   /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
   .scroll > .card > h3{
@@ -202,31 +352,9 @@
   
   
   
-  #cardPreview.on{ opacity:1; transform:translateY(0); }
-  #cardPreview::-webkit-scrollbar{ width:5.7px; }
-  #cardPreview::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:2.8px; }
-  #cardPreview .pvTitle{
-    font-size:11.9px; font-weight:700; color:var(--brand, #1B365D);
-    margin:0 0 7.6px; padding-bottom:5.7px;
-    border-bottom:0.9px solid rgba(226,214,186,.7);
-    display:flex; align-items:baseline; gap:5.7px; flex-wrap:wrap;
-  }
-  #cardPreview .pvTitle .pvHint{
-    margin-left:auto; font-size:9.5px; font-weight:400; color:#b9b2a3;
-  }
-  #cardPreview .pvBody > *:first-child{ margin-top:0 !important; }
-  #cardPreview .pvBody > *:last-child{ margin-bottom:0 !important; }
-
-
-  /* 滚动内容不做任何遮罩：mask 会把文字一起淡掉。
-     真正需要柔化的只有窗口边缘的玻璃层，那是 body::before 的事。 */
-
-  /* 剪藏助手 iframe：透明底，跟着整块玻璃走 */
-  .clipFrame{
-    width:100%; height:420px; border:0.9px solid rgba(221,213,196,.5);
-    border-radius:7.6px; background:transparent; display:block;
-    color-scheme:normal;
-  }
+  
+  
+  
 
   /* 卡片：默认**完全透明**，让底下的不规则玻璃层完整透出来。
      之前给 .30 的白底会把边缘渐变盖住，看起来就是"玻璃没有雾化、
@@ -655,41 +783,6 @@
   .empty code{ background:#f3f0e5; border:0.9px solid var(--line); border-radius:3.8px; padding:0 3.8px; font-size:10.4px; }
   .foot{ flex:none; border-top:0.9px solid var(--line); padding:5.7px 11.4px; font-size:10.0px; color:#4a453d; }
 
-  /* ---- 自定义输入弹框 ----
-     window.prompt / confirm 在 Tauri 里会弹出
-     「tauri.localhost 想要…」这种系统提示，很难看。
-     这里用页面内的浮层代替。 */
-  #askMask{
-    position:fixed; inset:0; z-index:9999;
-    background:rgba(40,36,30,.28);
-    display:none; align-items:center; justify-content:center;
-  }
-  #askMask.on{ display:flex; }
-  #askBox{
-    width:272px; box-sizing:border-box;
-    background:rgba(255,251,238,.99);
-    border:1px solid rgba(226,214,186,.9);
-    border-radius:12px; padding:14px;
-    box-shadow:0 8px 28px rgba(80,70,50,.24);
-  }
-  #askTitle{ font-size:12px; font-weight:600; color:#2b2a26; margin-bottom:9px; }
-  #askInput{
-    width:100%; box-sizing:border-box;
-    padding:7px 9px; font:12px/1.5 inherit; font-family:inherit;
-    border:1px solid rgba(200,190,170,.85); border-radius:6px;
-    background:#fffdf7; color:#2b2a26; outline:none;
-  }
-  #askInput:focus{ border-color:#d9a015; box-shadow:0 0 0 2px rgba(217,160,21,.16); }
-  #askBtns{ display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
-  #askBtns button{
-    padding:5px 14px; font:12px/1 inherit; font-family:inherit;
-    border-radius:6px; cursor:pointer;
-    border:1px solid rgba(200,190,170,.85); background:#fffdf7; color:#5f5a51;
-  }
-  #askBtns button:hover{ background:#f7f3ea; }
-  #askOk{ background:#d9a015; border-color:#c8900f; color:#fff; }
-  #askOk:hover{ background:#c8900f; }
-
 </style>
 </head>
 <body>
@@ -939,8 +1032,13 @@
     bodyEl.addEventListener("submit", function(ev){ ev.preventDefault(); }, true);
   }
 
+  var _lastRaw = "";
+
   function loadOnce(){
-    invoke("preview_payload").then(render).catch(function(){
+    invoke("preview_payload").then(function(txt){
+      _lastRaw = txt || "";
+      render(txt);
+    }).catch(function(){
       bodyEl.textContent = "（内容读取失败）";
     });
   }
@@ -948,8 +1046,29 @@
   window.__renderPreview = render;
   /* Rust 侧内容更新后会调它，只重读文件、不动窗口 */
   window.__reload = loadOnce;
+
   loadOnce();
   setTimeout(loadOnce, 220);
+
+  /* ---- 主动轮询 ----
+     Rust 那边原本用 eval("__reload()") 通知刷新，但 WebView2 上
+     eval 到另一个窗口有时会被丢掉 —— 表现就是「操作完了浮层不变，
+     要关掉重开才更新」。
+     这里改成自己每 320ms 读一次 payload 文件，内容变了就重渲染。
+     payload 只有几 KB，开销可以忽略。 */
+  function pollPayload(){
+    try {
+      var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      if (!inv) return;
+      inv("preview_payload").then(function(txt){
+        if (!txt) return;
+        if (txt === _lastRaw) return;      /* 没变就不动 */
+        _lastRaw = txt;
+        render(txt);
+      }).catch(function(){});
+    } catch(e){}
+  }
+  setInterval(pollPayload, 320);
 })();
 </script>
 
