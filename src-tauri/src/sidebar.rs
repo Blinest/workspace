@@ -9,6 +9,8 @@
 //! 不会再被 primary_monitor 强行钉回主屏。
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Mutex;
 
 use tauri::{AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewUrl,
             WebviewWindow, WebviewWindowBuilder};
@@ -26,6 +28,8 @@ const HOTKEY_ID: i32 = 0xB001;
 
 const MOD_ALT: u32 = 0x0001;
 const MOD_CONTROL: u32 = 0x0002;
+const MOD_SHIFT: u32 = 0x0004;
+const MOD_WIN: u32 = 0x0008;
 const VK_SPACE: u32 = 0x20;
 const WM_HOTKEY: u32 = 0x0312;
 
@@ -56,6 +60,12 @@ extern "system" {
     fn DispatchMessageW(msg: *const Msg) -> isize;
     fn GetWindowLongW(hwnd: *mut c_void, index: i32) -> i32;
     fn SetWindowLongW(hwnd: *mut c_void, index: i32, value: i32) -> i32;
+    fn PostThreadMessageW(thread_id: u32, msg: u32, w_param: usize, l_param: isize) -> i32;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetCurrentThreadId() -> u32;
 }
 
 /* ---------------- 毛玻璃背景 ---------------- */
@@ -548,21 +558,136 @@ fn rescue_if_offscreen(app: &AppHandle, win: &WebviewWindow) {
 }
 
 /// 在独立线程注册 Ctrl+Alt+Space 并运行消息循环
+/// 热键可以被用户在设置里改。
+///
+/// 实现方式：消息循环跑在一个线程里，另起一个监视线程看配置有没有变；
+/// 变了就往热键线程投一条自定消息（`PostThreadMessageW`），
+/// 由它自己完成 `UnregisterHotKey` + `RegisterHotKey` 换绑 ——
+/// 热键绑定的是**线程**，必须在同一个线程里改。
+static HOTKEY_MOD: AtomicU32 = AtomicU32::new(0);
+static HOTKEY_VK: AtomicU32 = AtomicU32::new(0);
+/// 热键消息循环线程的 ID（`PostThreadMessageW` 需要）
+static HOTKEY_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+/// 换绑请求：`Some((mods, vk))`
+static HOTKEY_WANT: Mutex<Option<(u32, u32)>> = Mutex::new(None);
+/// 投递给热键线程的自定义消息号
+const WM_APP_REBIND: u32 = 0x0400 + 1;
+
+/// 热键配置文件名（放在 app_config_dir 下）
+fn hotkey_file(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_config_dir().ok()?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("hotkey.txt"))
+}
+
+/// 从配置读热键，格式：`mods vk`（十进制）。
+/// 读不到或格式不对就返回 None（调用方用默认值）。
+fn load_hotkey(app: &AppHandle) -> Option<(u32, u32)> {
+    let p = hotkey_file(app)?;
+    let t = std::fs::read_to_string(p).ok()?;
+    let mut it = t.split_whitespace();
+    let m = it.next()?.parse::<u32>().ok()?;
+    let v = it.next()?.parse::<u32>().ok()?;
+    if m == 0 || v == 0 { return None; }
+    Some((m, v))
+}
+
+fn save_hotkey(app: &AppHandle, mods: u32, vk: u32) {
+    if let Some(p) = hotkey_file(app) {
+        let _ = std::fs::write(p, format!("{} {}", mods, vk));
+    }
+}
+
+/// 把修饰键 + 虚拟键翻译成 `Ctrl+Alt+Space` 这样的可读文本
+fn hotkey_text(mods: u32, vk: u32) -> String {
+    let mut s = String::new();
+    if mods & MOD_CONTROL != 0 { s.push_str("Ctrl+"); }
+    if mods & MOD_ALT != 0 { s.push_str("Alt+"); }
+    if mods & MOD_SHIFT != 0 { s.push_str("Shift+"); }
+    if mods & MOD_WIN != 0 { s.push_str("Win+"); }
+    let key = match vk {
+        0x20 => "Space".to_string(),
+        0x0D => "Enter".to_string(),
+        0x09 => "Tab".to_string(),
+        0x1B => "Esc".to_string(),
+        0x70..=0x87 => format!("F{}", vk - 0x6F),
+        0x30..=0x39 => ((vk as u8) as char).to_string(),
+        0x41..=0x5A => ((vk as u8) as char).to_string(),
+        _ => format!("VK{}", vk),
+    };
+    s.push_str(&key);
+    s
+}
+
+/// 在独立线程注册热键并运行消息循环。
+///
+/// 默认 `Ctrl+Alt+Space`；用户在设置里改过就从配置读。
 pub fn spawn_hotkey_thread(app: AppHandle) {
     let _ = std::thread::Builder::new()
         .name("sidebar-hotkey".into())
         .spawn(move || unsafe {
-            if RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, MOD_CONTROL | MOD_ALT, VK_SPACE) == 0 {
-                eprintln!("[sidebar] 注册热键 Ctrl+Alt+Space 失败（可能被其他程序占用）");
-                return;
+            HOTKEY_THREAD_ID.store(GetCurrentThreadId(), Ordering::Relaxed);
+
+            let (mut mods, mut vk) = load_hotkey(&app).unwrap_or((MOD_CONTROL | MOD_ALT, VK_SPACE));
+
+            /* 注册失败就退回默认组合，避免用户改成被占用的键后彻底没热键 */
+            loop {
+                if RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, mods, vk) != 0 {
+                    HOTKEY_MOD.store(mods, Ordering::Relaxed);
+                    HOTKEY_VK.store(vk, Ordering::Relaxed);
+                    eprintln!("[sidebar] 已注册热键 {}", hotkey_text(mods, vk));
+                    break;
+                }
+                eprintln!("[sidebar] 注册热键 {} 失败（可能被占用）", hotkey_text(mods, vk));
+                if (mods, vk) == (MOD_CONTROL | MOD_ALT, VK_SPACE) { return; }
+                mods = MOD_CONTROL | MOD_ALT;
+                vk = VK_SPACE;
             }
-            eprintln!("[sidebar] 已注册热键 Ctrl+Alt+Space");
+
+            /* 监视线程：发现配置变了就往热键线程投一条自定消息 */
+            let _ = std::thread::Builder::new()
+                .name("sidebar-hotkey-watch".into())
+                .spawn(move || loop {
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                    let want = { *HOTKEY_WANT.lock().unwrap() };
+                    if let Some((m2, v2)) = want {
+                        if (m2, v2) == (HOTKEY_MOD.load(Ordering::Relaxed), HOTKEY_VK.load(Ordering::Relaxed)) {
+                            *HOTKEY_WANT.lock().unwrap() = None;
+                            continue;
+                        }
+                        let tid = HOTKEY_THREAD_ID.load(Ordering::Relaxed);
+                        if tid != 0 {
+                            PostThreadMessageW(tid, WM_APP_REBIND, 0, 0);
+                        }
+                    }
+                });
+
             let mut msg: Msg = std::mem::zeroed();
             loop {
                 let r = GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0);
-                if r <= 0 {
-                    break; // 0 = WM_QUIT，-1 = 出错
+                if r <= 0 { break; }
+
+                if msg.message == WM_APP_REBIND {
+                    let want = { *HOTKEY_WANT.lock().unwrap() };
+                    if let Some((m2, v2)) = want {
+                        UnregisterHotKey(std::ptr::null_mut(), HOTKEY_ID);
+                        if RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, m2, v2) != 0 {
+                            HOTKEY_MOD.store(m2, Ordering::Relaxed);
+                            HOTKEY_VK.store(v2, Ordering::Relaxed);
+                            eprintln!("[sidebar] 热键已改为 {}", hotkey_text(m2, v2));
+                        } else {
+                            /* 新键被占用：把旧的注册回来 */
+                            let om = HOTKEY_MOD.load(Ordering::Relaxed);
+                            let ov = HOTKEY_VK.load(Ordering::Relaxed);
+                            let _ = RegisterHotKey(std::ptr::null_mut(), HOTKEY_ID, om, ov);
+                            eprintln!("[sidebar] 换绑 {} 失败，保持 {}",
+                                      hotkey_text(m2, v2), hotkey_text(om, ov));
+                        }
+                        *HOTKEY_WANT.lock().unwrap() = None;
+                    }
+                    continue;
                 }
+
                 if msg.message == WM_HOTKEY {
                     let _ = toggle(&app);
                 }
@@ -571,6 +696,23 @@ pub fn spawn_hotkey_thread(app: AppHandle) {
             }
             UnregisterHotKey(std::ptr::null_mut(), HOTKEY_ID);
         });
+}
+
+/// 读取当前热键（给前端显示用）
+#[tauri::command]
+pub fn get_hotkey(app: AppHandle) -> Result<String, String> {
+    let (m, v) = load_hotkey(&app).unwrap_or((MOD_CONTROL | MOD_ALT, VK_SPACE));
+    Ok(hotkey_text(m, v))
+}
+
+/// 设置新热键。返回 `("ok", 显示文本)` 或 `("busy", 说明)`。
+#[tauri::command]
+pub fn set_hotkey(app: AppHandle, mods: u32, vk: u32) -> Result<String, String> {
+    if mods == 0 { return Ok("none:至少要一个修饰键".into()); }
+    if vk == 0 { return Ok("none:按键无效".into()); }
+    save_hotkey(&app, mods, vk);
+    *HOTKEY_WANT.lock().unwrap() = Some((mods, vk));
+    Ok(format!("ok:{}", hotkey_text(mods, vk)))
 }
 
 /// 供前端/调试手动切换（侧边栏里按 Esc 也可以调它）

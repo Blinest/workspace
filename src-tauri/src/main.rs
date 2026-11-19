@@ -8,6 +8,7 @@ mod sidebar;
 mod siyuan;
 mod dragdrop;
 mod weekly;
+mod appbar;
 
 use tauri::Manager;
 
@@ -27,6 +28,9 @@ fn main() {
             sidebar::main_window_action,
             sidebar::main_maximized,
             sidebar::open_url,
+            sidebar::get_hotkey,
+            sidebar::set_hotkey,
+            appbar::appbar_set,
             dragdrop::take_dropped_files,
             dragdrop::read_file_base64,
             dragdrop::drag_state

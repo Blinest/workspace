@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.0.7 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.0.8 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1441,6 +1441,34 @@ html, body { margin: 0; padding: 0; }
         </div>
 
         <div class="dshell-card">
+          <h2 class="dshell-sub" style="margin:0 0 10px">侧边栏</h2>
+          <p class="lg-note" style="margin:0 0 10px">
+            全局快捷键用于随时呼出/收起侧边栏。点输入框后直接按下新的组合键即可。
+          </p>
+          <div class="lg-field">
+            <label>呼出快捷键</label>
+            <input id="hkInput" class="dshell-input" readonly
+                   placeholder="点这里后按下组合键" style="cursor:pointer" />
+          </div>
+          <div style="height:12px"></div>
+          <div class="lg-field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input id="appbarChk" type="checkbox" style="margin:0" />
+              <span>占住屏幕边缘（其他窗口最大化时自动避开侧边栏）</span>
+            </label>
+          </div>
+          <p class="lg-note" style="margin:6px 0 0">
+            开启后侧边栏会像任务栏一样占一条屏幕边缘。只对「最大化」和「贴边对齐」
+            的窗口生效，普通窗口不会自动移动。
+          </p>
+          <div style="height:12px"></div>
+          <div class="lg-actions">
+            <button id="hkSave" class="dshell-btn">保存</button>
+            <span id="hkResult" class="lg-hint"></span>
+          </div>
+        </div>
+
+        <div class="dshell-card">
           <h2 class="dshell-sub" style="margin:0 0 10px">拓展服务</h2>
           <p class="lg-note" style="margin:0 0 10px">
             发票 PDF 解析（含 OCR）跑在独立服务器上，不随本软件分发。
@@ -1467,7 +1495,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.7</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.0.8</span>
   </div>
 </div>
 
@@ -8050,6 +8078,115 @@ async function gradeAI(){
       })
       .then(function(){ svcSaveEl.disabled = false; });
   });
+
+  /* ---- 侧边栏：全局快捷键 + 占住屏幕边缘 ---- */
+  var hkInput  = document.getElementById("hkInput");
+  var hkSave   = document.getElementById("hkSave");
+  var hkResult = document.getElementById("hkResult");
+  var appbarChk= document.getElementById("appbarChk");
+
+  /* 当前待保存的组合（按下按键时填进来） */
+  var hkPending = null;
+
+  function invoke(cmd, args){
+    try {
+      var iv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      return iv ? iv(cmd, args || {}) : Promise.reject(new Error("不在 Tauri 环境"));
+    } catch(e) { return Promise.reject(e); }
+  }
+
+  /* 按键事件 → (mods, vk)。mods 位与 Win32 一致：1=Alt 2=Ctrl 4=Shift 8=Win */
+  function modsOf(ev){
+    var m = 0;
+    if (ev.altKey) m |= 1;
+    if (ev.ctrlKey) m |= 2;
+    if (ev.shiftKey) m |= 4;
+    if (ev.metaKey) m |= 8;
+    return m;
+  }
+  function keyOf(ev){
+    var k = ev.key;
+    if (k === " " || ev.code === "Space") return { vk: 0x20, text: "Space" };
+    if (k === "Enter") return { vk: 0x0D, text: "Enter" };
+    if (k === "Tab") return { vk: 0x09, text: "Tab" };
+    if (k === "Escape") return { vk: 0x1B, text: "Esc" };
+    if (/^F([1-9]|1[0-2])$/.test(k)) return { vk: 0x70 + (parseInt(k.slice(1),10) - 1), text: k };
+    if (/^[0-9]$/.test(k)) return { vk: k.charCodeAt(0), text: k };
+    if (/^[a-zA-Z]$/.test(k)) return { vk: k.toUpperCase().charCodeAt(0), text: k.toUpperCase() };
+    return null;
+  }
+  function hkText(mods, vk){
+    var s = "";
+    if (mods & 2) s += "Ctrl+";
+    if (mods & 1) s += "Alt+";
+    if (mods & 4) s += "Shift+";
+    if (mods & 8) s += "Win+";
+    return s + (hkPending ? hkPending.text : ("VK" + vk));
+  }
+
+  if (hkInput) {
+    hkInput.addEventListener("keydown", function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      var k = keyOf(ev);
+      if (!k) { hkResult.textContent = "这个键不支持，换一个"; return; }
+      var m = modsOf(ev);
+      if (!m) { hkResult.textContent = "至少要一个修饰键（Ctrl / Alt / Shift / Win）"; return; }
+      hkPending = { mods: m, vk: k.vk, text: k.text };
+      hkInput.value = hkText(m, 0);
+      hkResult.textContent = "按「保存」生效";
+    });
+    /* 聚焦时给个提示，避免用户不知道要按键 */
+    hkInput.addEventListener("focus", function(){
+      if (!hkPending) hkResult.textContent = "直接按下新的组合键";
+    });
+  }
+
+  /* 读取当前配置 */
+  if (hkInput) {
+    invoke("get_hotkey").then(function(t){
+      if (t) hkInput.value = t;
+    }).catch(function(){ hkInput.value = "Ctrl+Alt+Space"; });
+  }
+  try {
+    appbarChk.checked = localStorage.getItem("dsh.worktable.appbar.v1") === "1";
+  } catch(e){}
+
+  if (hkSave) hkSave.addEventListener("click", function(ev){
+    ev.preventDefault();
+    var tasks = [];
+    if (hkPending) {
+      tasks.push(invoke("set_hotkey", { mods: hkPending.mods, vk: hkPending.vk })
+        .then(function(r){
+          var s = String(r || "");
+          if (s.indexOf("ok:") === 0) {
+            hkInput.value = s.slice(3);
+            hkPending = null;
+            hkResult.textContent = "✓ 快捷键已改为 " + hkInput.value;
+          } else {
+            hkResult.textContent = "✕ " + s.replace(/^\w+:/, "");
+          }
+        }));
+    }
+    var wantOn = !!appbarChk.checked;
+    tasks.push(invoke("appbar_set", { on: wantOn }).then(function(){
+      try { localStorage.setItem("dsh.worktable.appbar.v1", wantOn ? "1" : "0"); } catch(e){}
+      if (!hkPending) hkResult.textContent = "✓ 已保存" + (wantOn ? "，「占住屏幕边缘」已开启" : "，「占住屏幕边缘」已关闭");
+    }).catch(function(e){
+      hkResult.textContent = "✕ " + ((e && e.message) || e);
+    }));
+
+    Promise.all(tasks).catch(function(e){
+      hkResult.textContent = "✕ " + ((e && e.message) || e);
+    });
+  });
+
+  /* 启动时按上次的设置恢复占位状态 */
+  try {
+    if (localStorage.getItem("dsh.worktable.appbar.v1") === "1") {
+      setTimeout(function(){ invoke("appbar_set", { on: true }).catch(function(){}); }, 2500);
+    }
+  } catch(e){}
 })();
 
 /* ===== 知识图谱 · 文档查找：搜索 + 长期未访问清单 ===== */
