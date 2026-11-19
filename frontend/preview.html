@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>预览</title>
+<style>
+:root{
+  --ink:#2b2a26; --sub:#8a8478; --brand:#1B365D;
+  --line:rgba(226,214,186,.85);
+}
+
+  html, body{
+    margin:0; padding:0; height:100%; width:100%;
+    background:transparent; overflow:hidden;
+    font:12px/1.65 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    color:var(--ink);
+    -webkit-user-select:none; user-select:none;
+  }
+  #card{
+    height:100%; box-sizing:border-box;
+    padding:12px 14px; overflow-y:auto;
+    background:rgba(255,251,238,.99);
+    border:1px solid var(--line);
+    border-radius:12px;
+    box-shadow:0 4px 10px rgba(120,110,90,.14),
+               0 16px 44px rgba(120,110,90,.26),
+               inset 0 1px 0 rgba(255,255,255,.95);
+    scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.35) transparent;
+  }
+  #card::-webkit-scrollbar{ width:6px; }
+  #card::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:3px; }
+  .pvTitle{
+    font-size:12.5px; font-weight:700; color:var(--brand);
+    margin:0 0 10px; padding-bottom:7px;
+    border-bottom:1px solid rgba(226,214,186,.7);
+    display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+  }
+  .pvTitle .pvHint{
+    margin-left:auto; font-size:10px; font-weight:400; color:#b9b2a3;
+  }
+  #body > *:first-child{ margin-top:0 !important; }
+  #body > *:last-child{ margin-bottom:0 !important; }
+  #body input, #body button, #body select{ pointer-events:none; }
+
+/* ===== 以下从侧边栏原样搬过来，保证预览里的排版和卡片一致 ===== */
+
+  :root{
+    --bg:#f6f4ec; --card:#fffdf7; --line:#e2dccb; --line2:#cdb48c;
+    /* 文字统一用近纯黑，配合下面的提亮底衬托 */
+    --ink:#0d0c0a; --sub:#2b2925; --dim:#4a453d; --brand:#1B365D;
+  }
+  *{ box-sizing:border-box; }
+  html,
+  /* 毛玻璃，边缘做成**不规则**的雾化。
+
+     ⚠ 关键约束：窗口只有 400px 宽，渐变画到 100% 就被截断。
+     每层 alpha 必须提前归零，否则最后几像素是实心白 → 硬边。
+
+     怎么做到"不规则"：
+     单个椭圆再宽也是个规整的蛋形。这里用 9 层**偏心、长宽比各不相同**
+     的径向渐变叠加，每层的中心点、半径、衰减曲线都不一样，
+     合成后的不透明度就没有任何可辨认的轮廓 —— 像烟不规则地散开。
+     再叠一层 SVG 噪点做细微扰动，让过渡带上带有轻微的颗粒感，
+     不会出现那种"计算机画出来的完美渐变"观感。 */
+  
+  /* 噪点层：单独一层，叠在玻璃之上、文字之下，只影响观感不影响阅读 */
+  
+  @keyframes noiseShift{
+    0%   { background-position:0 0; }
+    20%  { background-position:-24px -18px; }
+    40%  { background-position:18px -30px; }
+    60%  { background-position:-30px 22px; }
+    80%  { background-position:26px 13.3px; }
+    100% { background-position:0 0; }
+  }
+  @keyframes smokeDrift{
+    0%   { transform:translate3d(0, 0, 0) scale(1); }
+    33%  { transform:translate3d(-0.3%, -0.35%, 0) scale(1.006); }
+    66%  { transform:translate3d(0.35%, 0.2%, 0) scale(1.011); }
+    100% { transform:translate3d(0.15%, -0.15%, 0) scale(1.004); }
+  }
+  /* 用户要求减弱动画时全部静止 */
+  @media (prefers-reduced-motion: reduce){
+    body::before, body::after{ animation:none; }
+  }
+  /* 顶栏：透的，只留一条细分隔线；悬停时轻微加深，方便抓取拖动 */
+  
+  .hd:hover{ background:rgba(255,255,255,.55); }
+  .hd .ttl{ font-weight:700; color:var(--brand); font-size:12.8px; letter-spacing:.02em;
+    text-shadow:0 0.9px 0 rgba(255,255,255,.6);
+    flex:none; white-space:nowrap; cursor:pointer; }
+  .hd .sp{ flex:1 1 auto; min-width:0; }
+  .hd button{
+    border:0.9px solid rgba(190,180,160,.5); background:rgba(255,255,255,.55); color:var(--sub);
+    border-radius:5.7px; font-size:10.9px; padding:1.9px 7.6px; cursor:pointer; font-family:inherit;
+    white-space:nowrap; flex:none;
+  }
+  .hd button:hover{ border-color:var(--brand); color:var(--brand); background:rgba(255,255,255,.85); }
+  /* 「打开工作台」：主入口，做得比其它小按钮显眼一点 */
+  .hd .hdOpen{
+    border-color:rgba(27,54,93,.45); background:rgba(27,54,93,.08); color:var(--brand);
+    font-weight:600; letter-spacing:.01em;
+    /* 固定宽度：「⤢ 工作台」和「⤡ 收起」字数不同，
+       不锁宽的话切换时标题栏会左右抖一下 */
+    min-width:74px; text-align:center;
+  }
+  .hd .hdOpen:hover{ background:var(--brand); color:#fff; border-color:var(--brand); }
+  /* 开关状态：工作台开着时按钮反色、常亮，一眼看出「再点一下就会收起」 */
+  .hd .hdOpen.on{
+    background:var(--brand); color:#fff; border-color:var(--brand);
+    box-shadow:0 0 0 1.9px rgba(27,54,93,.14);
+  }
+  .hd .hdOpen.on:hover{ background:#12253f; border-color:#12253f; }
+
+  /* 手动拉取选择框：盖在侧边栏上，玻璃底 + 纸感按钮 */
+  .pullAsk{
+    position:fixed; inset:0; z-index:999; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(20,18,14,.28); backdrop-filter:blur(2.8px);
+  }
+  .pullAsk .pa-card{
+    width:260px; padding:15.2px 15.2px 11.4px;
+    background:linear-gradient(180deg,#fffdf7,#f7f4ea);
+    border:0.9px solid rgba(190,180,160,.6); border-radius:11.4px;
+    box-shadow:0 11.4px 34px -11.4px rgba(27,54,93,.45), 0 0.9px 0 rgba(255,255,255,.8) inset;
+    display:flex; flex-direction:column; gap:7.6px;
+  }
+  .pullAsk .pa-title{ font-size:12.8px; font-weight:700; color:var(--brand); }
+  .pullAsk .pa-desc{ font-size:10.9px; color:var(--dim); margin-bottom:1.9px; }
+  /* 两端差异说明：列出仅本地 / 仅云端各是哪几条 */
+  .pullAsk .pa-diff{ font-size:10.0px; color:#8a6d2f; background:rgba(217,160,21,.08);
+    border:0.9px solid #e8d9a8; border-radius:4.8px; padding:3.8px 6.6px; margin:2.8px 0 4.8px;
+    line-height:1.55; word-break:break-all; }
+  .pullAsk .pa-btn{
+    padding:7.6px 9.5px; border-radius:7.6px; cursor:pointer; font-family:inherit;
+    border:0.9px solid rgba(27,54,93,.35); background:rgba(27,54,93,.06);
+    color:var(--brand); font-size:11.4px; font-weight:600;
+    transition:background .15s, color .15s, border-color .15s;
+    display:flex; flex-direction:column; align-items:flex-start; gap:1.9px;
+  }
+  .pullAsk .pa-btn:hover{ background:var(--brand); color:#fff; border-color:var(--brand); }
+  .pullAsk .pa-btn:hover .pa-time{ opacity:.9; }
+  .pullAsk .pa-btn .pa-nm{ font-size:11.4px; font-weight:600; }
+  .pullAsk .pa-btn .pa-time{
+    font-size:10.0px; font-weight:400; opacity:.75; font-variant-numeric:tabular-nums;
+  }
+  .pullAsk .pa-wb{
+    margin-top:1.9px; padding:5.7px 7.6px; border-radius:5.7px;
+    background:rgba(190,180,160,.12); border:0.9px dashed rgba(190,180,160,.5);
+    font-size:10.0px; color:var(--dim); font-variant-numeric:tabular-nums;
+  }
+  .pullAsk .pa-cancel{
+    margin-top:1.9px; padding:4.8px; border:0; background:transparent;
+    color:var(--dim); font-size:10.9px; cursor:pointer; font-family:inherit;
+  }
+  .pullAsk .pa-cancel:hover{ color:var(--sub); }
+
+  /* ================= 卡片布局 =================
+     每张卡片是一个固定高度的块，内容超出时在卡片内部滚动
+     （卡片自己带滚动条，能看出「还有内容」）。
+     卡片之间不抢空间，整列在 .scroll 里上下滚。
+
+     三种交互：
+       · 悬停 → 右侧浮出完整预览（只读，不改变卡片本身高度）
+       · 双击标题 → 在侧边栏内展开 / 再双击折叠
+       · 标题右侧的 ⌄ 按钮 → 同上，点一下即知当前状态
+     ============================================ */
+  
+  .scroll > .card::-webkit-scrollbar{ width:5.7px; }
+  .scroll > .card::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.3); border-radius:2.8px; }
+  .scroll > .card::-webkit-scrollbar-track{ background:transparent; }
+
+  /* 番茄钟内容少，给个更矮的上限 */
+  .scroll > .card#cardPomo{ max-height:none; overflow:hidden; }
+
+  /* ---- 折叠态 ---- */
+  .scroll > .card.isCollapsed{
+    max-height:46px; overflow:hidden;
+  }
+  .scroll > .card.isCollapsed > :not(h3){ display:none !important; }
+
+  /* ---- 展开态（双击 / 点按钮）---- */
+  .scroll > .card.isExpanded{
+    max-height:420px; overflow-y:auto;
+  }
+
+  /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
+  .scroll > .card > h3{
+    position:sticky; top:0; z-index:2;
+    background:rgba(255,251,238,.97);
+    cursor:pointer;
+    user-select:none;
+    /* 占满卡片宽度，滚动时标题条不会只覆盖一部分 */
+    margin-left:-11.4px; margin-right:-11.4px;
+    padding-left:11.4px; padding-right:11.4px;
+    padding-top:1.9px; padding-bottom:1.9px;
+  }
+  .scroll > .card.isCollapsed > h3{ margin-bottom:0; }
+
+  /* 折叠/展开按钮：一个小胶囊，箭头 + 状态文字，一眼看出当前是什么状态。
+     折叠时箭头朝右并写「展开」，展开时箭头朝下并高亮写「收起」。 */
+  
+  
+  
+  
+  
+  #cardPreview.on{ opacity:1; transform:translateY(0); }
+  #cardPreview::-webkit-scrollbar{ width:5.7px; }
+  #cardPreview::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:2.8px; }
+  #cardPreview .pvTitle{
+    font-size:11.9px; font-weight:700; color:var(--brand, #1B365D);
+    margin:0 0 7.6px; padding-bottom:5.7px;
+    border-bottom:0.9px solid rgba(226,214,186,.7);
+    display:flex; align-items:baseline; gap:5.7px; flex-wrap:wrap;
+  }
+  #cardPreview .pvTitle .pvHint{
+    margin-left:auto; font-size:9.5px; font-weight:400; color:#b9b2a3;
+  }
+  #cardPreview .pvBody > *:first-child{ margin-top:0 !important; }
+  #cardPreview .pvBody > *:last-child{ margin-bottom:0 !important; }
+
+
+  /* 滚动内容不做任何遮罩：mask 会把文字一起淡掉。
+     真正需要柔化的只有窗口边缘的玻璃层，那是 body::before 的事。 */
+
+  /* 剪藏助手 iframe：透明底，跟着整块玻璃走 */
+  .clipFrame{
+    width:100%; height:420px; border:0.9px solid rgba(221,213,196,.5);
+    border-radius:7.6px; background:transparent; display:block;
+    color-scheme:normal;
+  }
+
+  /* 卡片：默认**完全透明**，让底下的不规则玻璃层完整透出来。
+     之前给 .30 的白底会把边缘渐变盖住，看起来就是"玻璃没有雾化、
+     只是一块白" —— 这是雾化没生效的最主要原因。
+     鼠标移上去时才变成接近不透明。 */
+  
+  .card:hover{
+    background:rgba(255,251,238,.97);
+    border-color:rgba(226,214,186,.55);
+    box-shadow:0 1.9px 5.7px rgba(120,110,90,.08),
+               0 9.5px 32px rgba(120,110,90,.13),
+               0 22px 60px rgba(120,110,90,.07),
+               inset 0 0.9px 0 rgba(255,255,255,.9);
+  }
+  /* 悬停时卡片里的小控件也用不透明底，避免透出别的东西显得脏 */
+  .card:hover .pomoBtn,
+  .card:hover .pomoNoteIn,
+  .card:hover .pomoCur,
+  .card:hover .hdBtn,
+  .card:hover .addTask,
+  .card:hover .miniAct,
+  .card:hover .planAdd,
+  .card:hover .planCancel{ background:#fffdf7; }
+  .card > h3{
+    margin:0 0 7.6px; font-size:11.4px; color:var(--brand); font-weight:700;
+    display:flex; align-items:baseline; gap:5.7px;
+  }
+  .card > h3 .mini{ font-size:10.0px; color:#4a453d; font-weight:400; margin-left:auto; }
+
+  /* 评分 */
+  .score{ display:flex; align-items:baseline; gap:5.7px; margin-bottom:5.7px; }
+  .score b{ font-size:26px; color:var(--brand); font-family:Georgia,serif; line-height:1; }
+  .score .u{ font-size:10.4px; color:var(--sub); }
+  .score .g{ font-size:10.4px; font-weight:700; color:#fff; background:var(--brand); border-radius:4.8px; padding:0 6.6px; }
+  .score .g[data-g="A"]{ background:#2f7a4f; }
+  .score .g[data-g="C"]{ background:#b5762a; }
+  .score .g[data-g="D"]{ background:#8b4513; }
+  .score .g[data-g="S"]{ background:#8a6d2f; }
+  .bar{ height:3.8px; background:rgba(239,232,216,.6); border-radius:2.8px; overflow:hidden; margin-bottom:5.7px; }
+  .bar i{ display:block; height:100%; background:linear-gradient(90deg,#1B365D,#4f8ef7); }
+  .meta{ font-size:10.4px; color:var(--sub); display:flex; flex-wrap:wrap; gap:1.9px 9.5px; }
+  .meta b{ color:var(--brand); }
+
+  /* 任务 */
+  .task{ border-top:0.9px dashed #e6e0d1; padding:6.6px 0 4.8px; }
+  .task:first-of-type{ border-top:0; padding-top:1.9px; }
+  .task .row1{ display:flex; align-items:baseline; gap:5.7px; }
+  .task .nm{ flex:1 1 auto; min-width:0; font-size:11.9px; font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .task .q{ flex:none; font-size:9.5px; color:#8a6d2f; background:rgba(247,239,216,.55);
+    border:0.9px solid #e6d9b4; border-radius:6.6px; padding:0 4.8px; }
+  .subs{ margin:3.8px 0 0; padding:0; list-style:none; }
+  .subs li{ font-size:10.9px; color:var(--sub); display:flex; gap:5.7px; padding:0.9px 0; }
+  .subs li.done{ color:#a9a397; text-decoration:line-through; }
+  .subs .bx{ flex:none; width:10.4px; height:10.4px; border:0.9px solid #c9c1ae; border-radius:2.8px; margin-top:3.8px; }
+  .subs li.done .bx{ background:#2f7a4f; border-color:#2f7a4f; }
+  .subs li{ cursor:pointer; border-radius:3.8px; }
+  .subTxt{ flex:1 1 auto; min-width:0; }
+  /* 步骤级番茄：累计徽标 + 悬停出现的记时按钮 */
+  .pomoBadge{ flex:none; font-size:9.0px; color:#8a6d2f; background:rgba(247,239,216,.55);
+    border:0.9px solid #e6d9b4; border-radius:6.6px; padding:0 3.8px; white-space:nowrap; }
+  .stepPomo{ flex:none; border:0; background:transparent; color:#c9a227; cursor:pointer;
+    font-size:9.5px; padding:0 1.9px; opacity:0; transition:opacity .12s; font-family:inherit; }
+  .subs li:hover .stepPomo{ opacity:1; }
+  .stepPomo:hover{ color:#d9822b; }
+  /* 步骤行右侧的 ＋ 插入 / ✕ 删除：平时很淡，悬停才明显，别抢注意力 */
+  .stepIns, .stepDel{ flex:none; border:0; background:transparent; cursor:pointer;
+    font-size:9.5px; line-height:1; padding:0 1.9px; opacity:.18; transition:opacity .12s; }
+  .subs li:hover .stepIns, .subs li:hover .stepDel{ opacity:1; }
+  .stepIns{ color:#7a9a6a; }
+  .stepIns:hover{ color:#2f7a4f; }
+  .stepDel{ color:#b0897a; }
+  .stepDel:hover{ color:#c0392b; }
+  /* 步骤进度徽标：0% 时只显示一个很淡的「%」，有进度才染色 */
+  .stepPct{ flex:none; border:0.9px solid transparent; border-radius:3.8px; cursor:pointer;
+    font:600 9.0px/1.5 inherit; font-family:inherit; padding:0 3.8px; min-width:22px; text-align:center; }
+  .stepPct.none{ color:#a8a397; background:transparent; opacity:.28; font-weight:400; }
+  .subs li:hover .stepPct.none{ opacity:.9; }
+  .stepPct.low{ color:#8a6d2f; background:#fff3d8; border-color:#ecd9a4; }
+  .stepPct.mid{ color:#1B365D; background:#eaf0f8; border-color:#c3d2e6; }
+  .stepPct.high{ color:#2f7a4f; background:#eaf5ee; border-color:#bfdccb; }
+  .stepPct.full{ color:#2f7a4f; background:#dff0e7; border-color:#a8d0b8; }
+  /* 进度调节条 */
+  li.stepPctBox{ display:flex; align-items:center; gap:5.7px; margin:1.9px 0 3.8px 13.3px;
+    padding:3.8px 6.6px; border:0.9px solid #d8d0bd; background:#fffbe9; border-radius:4.8px; }
+  .stepPctLbl{ flex:none; font-size:9.5px; color:#7a6f5c; }
+  .stepPctRange{ flex:1 1 auto; min-width:0; height:2.8px; accent-color:#d9822b; cursor:pointer; }
+  .stepPctVal{ flex:none; min-width:32px; text-align:right; font:600 10.0px/1.5 inherit;
+    font-family:inherit; color:#8a6d2f; }
+  .stepPctOk{ flex:none; padding:0.9px 8.5px; border:0.9px solid #d9a015; background:#fbeec4;
+    color:#8a6d2f; border-radius:3.8px; font:10.0px/1.6 inherit; font-family:inherit;
+    font-weight:600; cursor:pointer; }
+  .stepPctOk:hover{ background:#f6e2a8; }
+  .stepPctCancel{ flex:none; padding:0.9px 5.7px; border:0.9px solid #d8d2c4; background:#fffdf7;
+    color:#8a8579; border-radius:3.8px; font:10.0px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  /* 插入新步骤的输入行 */
+  li.stepInsBox{ display:flex; align-items:center; gap:3.8px; margin:1.9px 0 3.8px 13.3px;
+    padding:2.8px 4.8px; border:0.9px solid #d8d0bd; background:#fffefb; border-radius:4.8px; }
+  .stepInsIn{ flex:1 1 auto; min-width:0; border:0.9px solid #e0dacb; border-radius:3.8px;
+    padding:0.9px 4.8px; font:10.4px/1.6 inherit; font-family:inherit; background:#fff; color:var(--ink); }
+  .stepInsIn:focus{ outline:none; border-color:var(--brand); }
+  .stepInsOk{ flex:none; padding:0.9px 8.5px; border:0.9px solid var(--brand); background:#EEF2F7;
+    color:var(--brand); border-radius:3.8px; font:10.0px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  .stepInsOk:hover{ background:#dde6f2; }
+  .stepInsCancel{ flex:none; padding:0.9px 5.7px; border:0.9px solid #d8d2c4; background:#fffdf7;
+    color:#8a8579; border-radius:3.8px; font:10.0px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  /* 点 🍅 后的「设时长」预备框：跟在步骤行下面 */
+  li.stepPrep{ display:flex; align-items:center; gap:4.8px; margin:2.8px 0 3.8px 13.3px;
+    padding:3.8px 5.7px; border:0.9px solid #e8d9a8; background:#fffbe9; border-radius:4.8px; }
+  .stepPrepMin{ width:46px; box-sizing:border-box; padding:0.9px 3.8px; border:0.9px solid #d8caa0;
+    border-radius:3.8px; font:10.4px/1.6 inherit; font-family:inherit; color:var(--ink); background:#fff; }
+  .stepPrepMin:focus{ outline:none; border-color:#d9822b; }
+  .stepPrepUnit{ font-size:9.5px; color:#7a6f5c; }
+  /* 「这一步在做什么」输入框：占满中间，和主窗口的说明框一致 */
+  .stepPrepNote{ flex:1 1 auto; min-width:0; box-sizing:border-box; padding:0.9px 4.8px;
+    border:0.9px solid #e2d5b0; border-radius:3.8px; font:10.4px/1.6 inherit; font-family:inherit;
+    background:#fffefb; color:var(--ink); }
+  .stepPrepNote:focus{ outline:none; border-color:#d9822b; }
+  .stepPrepGo{ flex:none; padding:0.9px 9.5px; border:0.9px solid #d9a015; background:#fbeec4;
+    color:#8a6d2f; border-radius:3.8px; font:10.4px/1.6 inherit; font-family:inherit;
+    font-weight:600; cursor:pointer; }
+  .stepPrepGo:hover{ background:#f6e2a8; }
+  .stepPrepCancel{ flex:none; padding:0.9px 5.7px; border:0.9px solid #d8d2c4; background:#fffdf7;
+    color:#8a8579; border-radius:3.8px; font:10.4px/1.6 inherit; font-family:inherit; cursor:pointer; }
+  .stepPrepCancel:hover{ background:#f4f2ec; }
+
+  /* 这一步的番茄记录，缩进挂在步骤下面（不是任务底部） */
+  .subs li.stepLogs{ display:block; padding:0 0 2.8px 16.1px; cursor:default; }
+  .subs li.stepLogs:hover{ background:transparent; }
+  .stepLogs .logLine{ margin:1.9px 0; }
+  /* 手动指定面板 */
+  .planBox{ font-size:10.9px; }
+  .planTitle{ font-weight:700; color:var(--ink); margin-bottom:5.7px; }
+  .planSub{ font-weight:400; color:#4a453d; font-size:9.5px; margin-left:5.7px; }
+  .planRow{ display:flex; align-items:center; gap:2.8px; margin-bottom:3.8px; }
+  .planIdx{ flex:none; width:13.3px; color:#4a453d; font-size:9.5px; text-align:right; }
+  .planName{ flex:1 1 auto; min-width:0; padding:0.9px 4.8px; border:0.9px solid var(--line);
+    border-radius:4.8px; background:rgba(255,255,255,.22); font:10.9px/1.6 inherit; font-family:inherit; }
+  .planPj{ flex:none; width:76px; padding:0 1.9px; border:0.9px solid var(--line); border-radius:4.8px;
+    background:rgba(255,255,255,.22); font:9.5px/1.6 inherit; font-family:inherit; color:var(--sub); }
+  .planMin{ flex:none; width:42px; padding:0 2.8px; border:0.9px solid var(--line); border-radius:4.8px;
+    background:rgba(255,255,255,.22); font:10.4px/1.6 inherit; text-align:center; }
+  .planUp, .planDn, .planDel{ flex:none; width:15.2px; border:0; background:transparent;
+    color:#4a453d; cursor:pointer; font-size:9.5px; padding:0; font-family:inherit; }
+  .planUp:hover, .planDn:hover{ color:var(--brand); }
+  .planDel:hover{ color:#c0392b; }
+  .planActions{ display:flex; gap:5.7px; margin-top:7.6px; }
+  .planAdd{ flex:1 1 auto; border:0.9px dashed #d8d0bd; background:rgba(255,255,255,.22); color:var(--brand);
+    border-radius:5.7px; font-size:10.4px; padding:2.8px 0; cursor:pointer; font-family:inherit; }
+  .planApply{ flex:none; border:0.9px solid var(--brand); background:var(--brand); color:#fff;
+    border-radius:5.7px; font-size:10.4px; padding:2.8px 11.4px; cursor:pointer; font-family:inherit; }
+  .planCancel{ flex:none; border:0.9px solid var(--line); background:rgba(255,255,255,.22); color:var(--sub);
+    border-radius:5.7px; font-size:10.4px; padding:2.8px 9.5px; cursor:pointer; font-family:inherit; }
+  /* 项目下拉 / 删除 / 新增 */
+  .pjSel{ flex:none; max-width:96px; padding:0 1.9px; border:0.9px solid var(--line); border-radius:4.8px;
+    background:rgba(255,255,255,.22); color:var(--sub); font:10.0px/1.6 inherit; font-family:inherit; }
+  .delTask{ flex:none; border:0; background:transparent; color:#c9c1ae; cursor:pointer;
+    font-size:10.4px; padding:0 2.8px; font-family:inherit; }
+  .delTask:hover{ color:#c0392b; }
+  .addRow{ margin:5.7px 0 1.9px; }
+  .addTask{ width:100%; border:0.9px dashed #d8d0bd; background:rgba(255,255,255,.22); color:var(--brand);
+    border-radius:5.7px; font-size:10.9px; padding:2.8px 0; cursor:pointer; font-family:inherit; }
+  .addTask:hover{ background:#EEF2F7; border-color:var(--brand); }
+  .subEdit{ flex:none; border:0; background:transparent; color:#c9c1ae; cursor:pointer;
+    font-size:9.5px; padding:0 2.8px; opacity:0; font-family:inherit; }
+  .subs li:hover .subEdit{ opacity:1; }
+  .subEdit:hover{ color:var(--brand); }
+  .nm.edt{ cursor:text; }
+  .nm.edt:hover{ border-bottom:0.9px dashed #c9c1ae; }
+  .subs li:hover{ background:#f7f4ea; }
+
+  /* 番茄记录 / 备注 / 操作行 */
+  .task.tdone .nm{ color:#4a453d; }
+
+  /* 项目分组标题 */
+  .projHead{ display:flex; align-items:center; gap:5.7px; margin:9.5px 0 3.8px; padding-bottom:2.8px;
+    border-bottom:0.9px solid #ece5d4; }
+  .projHead:first-of-type{ margin-top:1.9px; }
+  .pdot{ flex:none; width:6.6px; height:6.6px; border-radius:50%; }
+  .pname{ flex:1 1 auto; min-width:0; font-size:10.9px; font-weight:700; letter-spacing:.02em;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pcnt{ flex:none; font-size:9.5px; color:#4a453d; }
+
+  /* 重要待办：左侧色条按象限来（与主界面同色） */
+  .task.q-iu{ border-left:2.8px solid #e05252; padding-left:6.6px; margin-left:-1.9px; }
+  .task.q-in{ border-left:2.8px solid #d9a015; padding-left:6.6px; margin-left:-1.9px; }
+  .task.q-uu{ border-left:2.8px solid #e8863a; padding-left:6.6px; margin-left:-1.9px; }
+  .task.q-un{ border-left:2.8px solid #4caf6e; padding-left:6.6px; margin-left:-1.9px; }
+  .task.q-iu .nm, .task.q-in .nm{ color:#a93226; }
+  .starBtn{ flex:none; font-size:10.4px; color:#cfc8b8; cursor:pointer; line-height:1.2; user-select:none; }
+  .starBtn:hover{ color:#e0a800; }
+  .starBtn.on{ color:#e05252; }
+  .logLine{ font-size:10.0px; color:#7a5c2e; background:rgba(247,239,216,.45); border-left:1.9px solid #e0c98a;
+    padding:1.9px 5.7px; margin:3.8px 0 0; border-radius:0 3.8px 3.8px 0; overflow-wrap:anywhere; line-height:1.5; }
+  .noteLine{ font-size:10.0px; color:#8b4513; background:rgba(253,246,239,.45); border-left:1.9px solid #e3b98c;
+    padding:1.9px 5.7px; margin:3.8px 0 0; border-radius:0 3.8px 3.8px 0; overflow-wrap:anywhere; line-height:1.5; }
+  .card:hover .logLine{ background:#fbf7ec; }
+  .card:hover .noteLine{ background:#fdf6ef; }
+  .logLine, .noteLine{ cursor:default; display:flex; align-items:flex-start; gap:3.8px; }
+  .edt{ flex:1 1 auto; min-width:0; cursor:text; border-bottom:0.9px dashed transparent; }
+  .edt:hover{ border-bottom-color:#c9c1ae; }
+  .edt[contenteditable="true"]{ outline:0.9px solid var(--brand); background:#fff; border-radius:2.8px; padding:0 1.9px; }
+  .delBtn{ flex:none; border:0; background:transparent; color:#6b6458; cursor:pointer;
+    font-size:9.5px; line-height:1.2; padding:0 1.9px; font-family:inherit; }
+  .delBtn:hover{ color:#c0392b; }
+  .actRow{ display:flex; gap:3.8px; align-items:center; margin:4.8px 0 1.9px; }
+  .actRow .mi{ width:46px; flex:none; padding:0.9px 3.8px; border:0.9px solid var(--line); border-radius:4.8px;
+    background:rgba(255,255,255,.22); font:10.4px/1.5 inherit; color:var(--ink); text-align:center; }
+  .actRow .mt{ flex:1 1 auto; min-width:0; padding:0.9px 5.7px; border:0.9px solid var(--line); border-radius:4.8px;
+    background:rgba(255,255,255,.22); font:10.4px/1.5 inherit; color:var(--ink); }
+  .actRow .mi:focus, .actRow .mt:focus{ outline:none; border-color:var(--brand); }
+  .miniAct{ flex:none; border:0.9px solid var(--line2); background:rgba(255,255,255,.22); border-radius:4.8px;
+    font-size:10.4px; padding:0 4.8px; cursor:pointer; font-family:inherit; line-height:1.7; }
+  .miniAct:hover{ background:#EEF2F7; }
+
+  /* 数据库列表 */
+  .dbItem{ border-top:0.9px dashed #e6e0d1; padding:3.8px 0; }
+  .dbItem:first-of-type{ border-top:0; }
+  .dbHead{ display:flex; align-items:baseline; gap:5.7px; cursor:pointer; padding:1.9px 0; }
+  .dbToggle{ flex:none; color:#4a453d; font-size:9.5px; width:11.4px; }
+  .dbName{ flex:1 1 auto; min-width:0; font-size:11.4px; font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dbCnt{ flex:none; font-size:9.5px; color:#4a453d; }
+  .dbRows{ margin:1.9px 0 3.8px 11.4px; }
+  .dbRow{ font-size:10.4px; padding:2.8px 0; border-bottom:0.9px dotted #efe9da; line-height:1.5;
+    overflow-wrap:anywhere; word-break:break-word; }
+  .dbRow .c1{ font-weight:600; color:var(--ink); }
+  .dbRow .c2{ display:block; color:var(--sub); font-size:10.0px; margin-top:0.9px; }
+  /* ---------- 番茄钟（圆形计时） ---------- */
+  .pomoWrap{ display:flex; gap:9.5px; align-items:center; }
+  .pomoRing{ position:relative; flex:none; width:104px; height:104px; }
+  .pomoSvg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .pomoBg{ fill:none; stroke:#efe9da; stroke-width:7; }
+  .pomoFg{ fill:none; stroke:#d9822b; stroke-width:7; stroke-linecap:round;
+    stroke-dasharray:326.7; stroke-dashoffset:0; transition:stroke-dashoffset .4s linear, stroke .3s; }
+  .pomoRing.run .pomoFg{ stroke:#b8860b; }
+  .pomoRing.paused .pomoFg{ stroke:#9a948a; }
+  .pomoRing.done .pomoFg{ stroke:#2f7a4f; }
+  .pomoFace{ position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:0.9px; pointer-events:none; }
+  .pomoTime{ font:600 20px/1 ui-monospace,Consolas,monospace; color:var(--ink); letter-spacing:.4.8px; }
+  .pomoState{ font-size:9.0px; color:#4a453d; }
+  .pomoSide{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:4.8px; }
+  .pomoNoteIn{ width:100%; box-sizing:border-box; padding:1.9px 5.7px; border:0.9px solid var(--line);
+    border-radius:4.8px; background:rgba(255,255,255,.22); font:10.9px/1.6 inherit; font-family:inherit; color:var(--ink); }
+  .pomoNoteIn:focus{ outline:none; border-color:#d9822b; }
+  .pomoBtns{ display:flex; gap:4.8px; }
+  .pomoBtn{ flex:1 1 0; border:0.9px solid var(--line2); background:rgba(255,255,255,.22); color:var(--sub);
+    border-radius:5.7px; font-size:10.4px; padding:2.8px 0; cursor:pointer; font-family:inherit; }
+  .pomoBtn:hover{ background:#EEF2F7; }
+  .pomoGo{ border-color:#d9a015; color:#8a6d2f; background:rgba(255,246,220,.55); font-weight:600; }
+  .pomoGo:hover{ background:#fbeec4; }
+  .pomoBtn:disabled{ opacity:.45; cursor:default; }
+  .pomoPickWrap{ min-width:0; }
+  /* 当前瞄准的步骤（取代原来的下拉框）。
+     内容一行，超长省略；悬停看完整任务名+步骤名。 */
+  .pomoCur{ width:100%; box-sizing:border-box; padding:4.8px 7.6px; border:0.9px solid var(--line);
+    border-radius:4.8px; background:rgba(255,255,255,.22);
+    font:10.4px/1.4 inherit; font-family:inherit; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pomoCur.noneState{ color:var(--sub); font-style:italic; }
+  .pomoCur.locked{ background:rgba(217,160,21,.16); border-color:rgba(217,160,21,.45); color:#8a6a10; }
+  /* 每日完成情况 */
+  .capBlock{ margin-top:9.5px; border-top:0.9px dashed #e6e0d1; padding-top:7.6px; }
+  .capHead{ font-size:10.4px; font-weight:700; color:var(--ink); margin-bottom:3.8px; }
+  .capHead span{ font-weight:400; color:#4a453d; font-size:9.5px; margin-left:3.8px; }
+
+  /* 段位 */
+  .capRank{ display:flex; align-items:center; gap:6.6px; margin-bottom:4.8px; }
+  .capRankIcon{ flex:none; width:24px; height:24px; border-radius:50%; display:flex;
+    align-items:center; justify-content:center; font-size:12.3px;
+    border:1.4px solid currentColor; background:rgba(255,255,255,.35); }
+  .capRankBody{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:0.9px; }
+  .capRankBody b{ font-size:11.4px; line-height:1.2; }
+  .capRankBody i{ font-style:normal; font-size:9.0px; color:#4a453d; }
+  .capRankBar{ height:3.8px; background:#efe9da; border-radius:2.8px; overflow:hidden; margin-bottom:6.6px; }
+  .capRankBar i{ display:block; height:100%; border-radius:2.8px; }
+
+  /* 七天明细：小方格 */
+  .capDays{ display:grid; grid-template-columns:repeat(7,1fr); gap:2.8px; }
+  .capDay{ display:flex; flex-direction:column; align-items:center; gap:0.9px;
+    padding:3.8px 0.9px 2.8px; border-radius:4.8px; background:rgba(255,255,255,.28);
+    border:0.9px solid #ece5d4; }
+  .capDay.mute{ opacity:.42; }
+  .capDay.today{ border-color:var(--brand); background:rgba(27,54,93,.07); }
+  .capDayDow{ font-size:8.5px; color:var(--sub); }
+  .capDayEff{ font-size:10.9px; font-weight:700; color:var(--brand); line-height:1.15; }
+  .capDay.mute .capDayEff{ color:#b9b3a6; font-weight:400; }
+  .capDayPct{ font-size:8.1px; color:#8a7a54; }
+
+  .capRow{ display:flex; align-items:center; gap:5.7px; font-size:10.0px; padding:0.9px 0; }
+  .capDate{ flex:none; width:34px; color:var(--sub); }
+  .capBar{ flex:1 1 auto; height:4.8px; background:#efe9da; border-radius:2.8px; overflow:hidden; }
+  .capBar i{ display:block; height:100%; }
+  .capBar i.g{ background:#4caf6e; }
+  .capBar i.m{ background:#d9a015; }
+  .capBar i.b{ background:#e05252; }
+  .capNum{ flex:none; width:32px; text-align:right; color:var(--sub); }
+  .capMin{ flex:none; width:42px; text-align:right; color:#4a453d; }
+  .capFoot{ font-size:9.5px; color:#4a453d; margin-top:5.7px; line-height:1.5; }
+  .capFoot b{ color:var(--brand); }
+  .capEmpty{ font-size:10.0px; color:#4a453d; }
+  .empty2{ font-size:10.4px; color:#4a453d; padding:1.9px 0; }
+
+  /* 卡片标题里的按钮、搜索框 */
+  .hdBtn{ margin-left:3.8px; border:0.9px solid var(--line2); background:rgba(255,255,255,.22); color:var(--brand);
+    white-space:nowrap; padding:0.9px 5.7px;
+    border-radius:5.7px; font-size:10.0px; padding:0.9px 7.6px; cursor:pointer; font-family:inherit; font-weight:600; }
+  .hdBtn:hover{ background:#EEF2F7; }
+  .hdBtn:disabled{ opacity:.55; cursor:default; }
+  .hint{ font-size:10.0px; color:#8b4513; margin-top:4.8px; min-height:0; }
+  /* 删除步骤后的「撤销」浮条：贴在底部，6 秒后自己消失。
+     独立于 #todoHint —— 那个每次都被 textContent 重写，挂按钮会被清掉。 */
+  #undoStepBar{ position:fixed; left:9.5px; right:9.5px; bottom:44px; z-index:9999;
+    display:flex; align-items:center; justify-content:space-between; gap:7.6px;
+    padding:5.7px 9.5px; border-radius:7.6px; background:#fffbe9; border:0.9px solid #e8d9a8;
+    color:#8a6d2f; font:10.0px/1.5 inherit; font-family:inherit;
+    box-shadow:0 2.8px 11.4px rgba(90,70,20,.16); word-break:break-all; }
+  #undoStepBar button{ flex:none; border:0.9px solid #d9a015; background:#fbeec4; color:#8a6d2f;
+    border-radius:4.8px; padding:0.9px 8.5px; font:10.0px/1.7 inherit; font-family:inherit;
+    font-weight:600; cursor:pointer; }
+  #undoStepBar button:hover{ background:#f6e2a8; }
+  .searchBox{ width:100%; box-sizing:border-box; margin-bottom:7.6px; padding:3.8px 7.6px;
+    border:0.9px solid var(--line); border-radius:6.6px; background:rgba(255,255,255,.22); color:var(--ink);
+    font:10.9px/1.5 inherit; font-family:inherit; outline:none; }
+  .searchBox:focus{ border-color:var(--brand); }
+
+  /* 笔记本分组 */
+  .nbGroup{ margin-bottom:5.7px; }
+  .nbHead{ display:flex; align-items:center; gap:5.7px; cursor:pointer; padding:3.8px 5.7px;
+    border-radius:5.7px; background:transparent; transition:background .15s; }
+  .nbHead:hover{ background:rgba(240,234,217,.75); }
+  .card:hover .nbHead{ background:#f7f4ea; }
+  .card:hover .nbHead:hover{ background:#f0ead9; }
+  .nbDot{ flex:none; width:6.6px; height:6.6px; border-radius:50%; }
+  .nbName{ flex:1 1 auto; min-width:0; font-size:11.4px; font-weight:700; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nbCnt{ flex:none; font-size:9.5px; color:#4a453d; }
+  .nbBody{ margin:2.8px 0 3.8px 9.5px; border-left:1.9px solid #ece5d4; padding-left:7.6px; }
+  .dbBrief{ font-size:9.5px; color:#4a453d; margin:0 0 1.9px 18px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* 周报 */
+  .wkLine{ font-size:11.4px; color:var(--ink); margin:0 0 5.7px; line-height:1.65; }
+  .wkStats{ display:flex; gap:13.3px; font-size:10.4px; color:var(--sub); margin-bottom:5.7px; }
+  .wkStats b{ color:var(--brand); font-size:12.3px; }
+  .wkSec{ font-size:10.9px; color:var(--sub); padding:0.9px 0; }
+  .wkSec b{ color:var(--ink); font-weight:600; }
+  /* 当天的 AI 总结：比周报小节更靠前、更有分量 */
+  .wkToday{ font-size:10.9px; line-height:1.65; color:var(--ink); padding:4.8px 7.6px;
+    border-left:1.9px solid var(--brand); background:rgba(255,255,255,.32);
+    border-radius:0 4.8px 4.8px 0; margin-bottom:6.6px; }
+  .wkTodayK{ display:inline-block; font-size:9.0px; font-weight:700; color:#fff;
+    background:var(--brand); border-radius:2.8px; padding:0 4.8px; margin-right:5.7px;
+    vertical-align:0.9px; }
+
+  /* 今日完成情况：四个数字 */
+  .wkTodayStat{ display:grid; grid-template-columns:repeat(4,1fr); gap:3.8px; margin:1.9px 0 4.8px; }
+  .wkTodayStat span{ display:flex; flex-direction:column; align-items:center; gap:0;
+    padding:4.8px 1.9px; border-radius:5.7px; background:rgba(255,255,255,.28);
+    border:0.9px solid #ece5d4; line-height:1.25; }
+  .wkTodayStat b{ font-size:14.3px; color:var(--brand); font-weight:700; white-space:nowrap; line-height:1.15; }
+  .wkTodayStat b.nw{ display:block; }
+  /* 分数可能长（0/110），字号压小一点，保证一格放得下不换行 */
+  .wkTodayStat b.sm{ font-size:10.9px; padding-top:1.9px; }
+  .wkTodayStat i{ font-style:normal; font-size:8.1px; color:var(--sub); margin-top:0.9px; white-space:nowrap; }
+  .wkTodayBar{ height:3.8px; background:#efe9da; border-radius:2.8px; overflow:hidden; margin-bottom:3.8px; }
+  .wkTodayBar i{ display:block; height:100%; border-radius:2.8px; transition:width .25s; }
+  .wkTodaySub{ font-size:9.0px; color:#4a453d; }
+  .wkTodayTips{ list-style:none; margin:6.6px 0 0; padding:0; }
+  /* 每条 = 一行「关键结论」大字 + 一行「措施」小字。
+     颜色按语义：坏=红、好=绿、持平=不变色。
+     深浅按严重程度（lv1 浅 → lv3 深）：微降是浅红，大降是深红。 */
+  .wkTodayTips li{ display:flex; flex-direction:column; gap:0.9px;
+    padding:4.8px 0 4.8px 9.5px; border-left:1.9px solid #e0d8c6; margin-bottom:2.8px; }
+  .wkTodayTips li:last-child{ margin-bottom:0; }
+  .wkTipK{ font-size:10.9px; font-weight:700; color:var(--ink); line-height:1.35; }
+  /* 结论里的数字：放大一号，颜色跟条目一致 */
+  .wkTipK b.n{ font-size:13.3px; font-weight:800; color:var(--brand); padding:0 0.9px; }
+  .wkTipD{ font-size:9.5px; color:#7d776b; line-height:1.5; }
+
+  /* —— 坏（慢 / 降 / 低）：红，三档深浅 —— */
+  .wkTodayTips li.bad.lv1{ border-left-color:#e8c4bd; }
+  .wkTodayTips li.bad.lv1 .wkTipK{ color:#c06a5c; }
+  .wkTodayTips li.bad.lv2{ border-left-color:#d98a7a; }
+  .wkTodayTips li.bad.lv2 .wkTipK{ color:#b3453a; }
+  .wkTodayTips li.bad.lv3{ border-left-color:#a93226; background:rgba(192,57,43,.045); }
+  .wkTodayTips li.bad.lv3 .wkTipK{ color:#95261a; }
+  .wkTodayTips li.bad .wkTipK b.n{ color:inherit; }
+
+  /* —— 好（快 / 升 / 高）：绿，三档深浅 —— */
+  .wkTodayTips li.good.lv1{ border-left-color:#bcdcc3; }
+  .wkTodayTips li.good.lv1 .wkTipK{ color:#4f9169; }
+  .wkTodayTips li.good.lv2{ border-left-color:#78b78c; }
+  .wkTodayTips li.good.lv2 .wkTipK{ color:#2f7a4f; }
+  .wkTodayTips li.good.lv3{ border-left-color:#2f7a4f; background:rgba(47,122,79,.045); }
+  .wkTodayTips li.good.lv3 .wkTipK{ color:#1f5c39; }
+  .wkTodayTips li.good .wkTipK b.n{ color:inherit; }
+
+  /* —— 持平：不变色 —— */
+  .wkTodayTips li.flat .wkTipK{ color:var(--ink); }
+
+  /* 数字格子 / 标签 / 列表（知识图谱、数据库汇总） */
+  .grid4, .grid2{ display:grid; gap:5.7px; margin-bottom:7.6px; }
+  .grid4{ grid-template-columns:repeat(4,1fr); }
+  .grid2{ grid-template-columns:repeat(2,1fr); }
+  .grid4 > div, .grid2 > div{ text-align:center; background:transparent; border:0.9px solid rgba(221,213,196,.55);
+    border-radius:7.6px; padding:5.7px 1.9px; }
+  .grid4 b, .grid2 b{ display:block; font-size:15.2px; color:var(--brand); font-family:Georgia,serif; line-height:1.2; }
+  .grid4 span, .grid2 span{ font-size:9.5px; color:#4a453d; }
+  .chips{ display:flex; flex-wrap:wrap; gap:4.8px; margin-bottom:7.6px; overflow:hidden; }
+  .chip{ font-size:10.0px; color:var(--sub); background:transparent; border:0.9px solid rgba(221,213,196,.55);
+    border-radius:20px; padding:0 7.6px; max-width:150px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+  /* 悬停整张卡片时，这些统计块才补上底色 */
+  .card:hover .grid4 > div, .card:hover .grid2 > div{ background:#f7f4ea; border-color:var(--line); }
+  .card:hover .chip{ background:#f7f4ea; border-color:var(--line); }
+  .chip i{ font-style:normal; color:var(--brand); margin-left:3.8px; font-size:9.5px; }
+  .recent{ font-size:10.9px; color:var(--sub); }
+  .rline{ display:flex; gap:5.7px; align-items:baseline; padding:0.9px 0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rline .num{ margin-left:auto; color:var(--brand); font-size:10.0px; }
+  .subTitle{ font-size:10.0px; color:#4a453d; margin:5.7px 0 1.9px; }
+
+  .empty{ font-size:11.4px; color:#4a453d; line-height:1.8; }
+  .empty code{ background:#f3f0e5; border:0.9px solid var(--line); border-radius:3.8px; padding:0 3.8px; font-size:10.4px; }
+  .foot{ flex:none; border-top:0.9px solid var(--line); padding:5.7px 11.4px; font-size:10.0px; color:#4a453d; }
+
+</style>
+</head>
+<body>
+  <div id="card">
+    <div class="pvTitle">
+      <span id="name">预览</span>
+      <span class="pvHint">只读预览</span>
+    </div>
+    <div id="body"></div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var nameEl = document.getElementById("name");
+  var bodyEl = document.getElementById("body");
+
+  /* 内容由 Rust 写进 app_config_dir/preview-payload.json。
+     ⚠ 不走 URL 参数：卡片 HTML 上千字符，编码后 URL 超长会白屏。
+     ⚠ 不走 eval：WebView2 上 eval 会同步阻塞，hover 时界面卡。 */
+  function render(payload){
+    try {
+      var p = typeof payload === "string" ? JSON.parse(payload) : payload;
+      if (!p) return;
+      nameEl.textContent = p.title || "预览";
+      bodyEl.innerHTML = p.html || "";
+    } catch(e) {
+      bodyEl.textContent = "（内容解析失败）";
+    }
+  }
+
+  function loadOnce(){
+    try {
+      var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+      if (!inv) { bodyEl.textContent = "（预览不可用）"; return; }
+      inv("preview_payload").then(render).catch(function(){
+        bodyEl.textContent = "（内容读取失败）";
+      });
+    } catch(e) {
+      bodyEl.textContent = "（预览不可用）";
+    }
+  }
+
+  window.__renderPreview = render;
+  loadOnce();
+  setTimeout(loadOnce, 220);
+})();
+</script>
+</body>
+</html>

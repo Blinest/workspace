@@ -21,7 +21,9 @@ fn main() {
             sidebar::toggle_sidebar,
             sidebar::snap_sidebar,
             sidebar::sidebar_pos,
-            sidebar::preview_width,
+            sidebar::preview_show,
+            sidebar::preview_hide,
+            sidebar::preview_payload,
             sidebar::move_sidebar,
             sidebar::show_main,
             sidebar::toggle_main,
@@ -59,6 +61,9 @@ fn main() {
                 });
             }
             sidebar::spawn_hotkey_thread(handle.clone());
+            /* 预览窗口的专用线程：所有建窗/隐藏都在这里做，
+               避免 IPC 线程碰窗口 API 时死锁 */
+            sidebar::spawn_preview_thread(handle.clone());
             /* 任务栏显示/隐藏会改变工作区高度，侧边栏要跟着长高/变矮 */
             sidebar::spawn_workarea_watcher(handle.clone());
             // 托管系统拖放（WebView2 会拦截 HTML 拖放事件）

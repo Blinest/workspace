@@ -9,7 +9,7 @@
 //! 不会再被 primary_monitor 强行钉回主屏。
 
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewUrl,
@@ -471,8 +471,13 @@ fn restore_saved(app: &AppHandle, win: &WebviewWindow) -> tauri::Result<bool> {
                现在：按记录所在屏的缩放，把物理宽度换算回逻辑宽度再设。 */
             let scale = m.scale_factor();
             let logical_w = if scale > 0.0 { (s.w as f64 / scale).round() } else { s.w as f64 };
-            /* 宽度以「记录值」为准，但至少给到设计宽度，避免历史脏数据把窗口压窄 */
-            let want_w = logical_w.max(WIDTH);
+            /* 宽度永远是设计宽度。
+               以前允许「至少 WIDTH」，本意是防历史脏数据压窄；
+               但预览功能曾经临时撑宽窗口并写进了记录，
+               于是 748 这种宽度会被当成合法值一直恢复。
+               现在统一用标准宽度 —— 侧边栏本来也不该被拉宽。 */
+            let want_w = WIDTH;
+            let _ = logical_w;
 
             /* w/h 记录的是「外框」，而 set_size 设的是「内容」。
                两者差一圈不可见边框（约 22x13）。先量当前差值再补偿，
@@ -873,63 +878,172 @@ pub fn snap_sidebar(app: AppHandle, content_w: Option<u32>) -> Result<String, St
     }
 }
 
-/// 把侧边栏临时加宽 / 恢复，供「右侧预览浮层」使用。
-///
-/// 侧边栏本身只有 400px，浮动预览放不下。做法是在**没贴边的那一侧**
-/// 临时把窗口撑开：贴右时向左扩，贴左时向右扩 —— 视觉上像面板
-/// 从内侧滑出来，贴边的那条边始终保持不动。
-///
-/// `extra`：要额外撑开多少逻辑像素（0 = 恢复原宽）。
-/// 返回扩展方向："left" / "right" / ""。
-#[tauri::command]
-pub fn preview_width(app: AppHandle, extra: u32) -> Result<String, String> {
-    let win = app
-        .get_webview_window(LABEL)
-        .ok_or_else(|| "侧边栏窗口不存在".to_string())?;
+/// 预览窗口的 label
+pub const PREVIEW_LABEL: &str = "preview";
 
-    let scale = win.scale_factor().map_err(|e| e.to_string())?;
-    let base_w = (WIDTH * scale).round() as u32;
-    let want_w = base_w + (extra as f64 * scale).round() as u32;
+/* ================= 预览窗口 =================
+   侧边栏尺寸始终不变（400px），预览是**独立窗口**，贴在未贴附的一侧。
 
-    let cur = win.outer_size().map_err(|e| e.to_string())?;
-    let pos = win.outer_position().map_err(|e| e.to_string())?;
-    if cur.width == want_w {
-        /* 尺寸没变也把方向告诉前端 */
-        return Ok(if edge_side(&win) == SNAP_LEFT { "right".into() } else { "left".into() });
-    }
+   为什么要专门开一个线程：
+   Tauri 的 get_webview_window() / set_visible() 在 IPC 线程上会等
+   窗口表的锁，而侧边栏窗口正被 WebView 持有 —— 一调就死锁。
+   所以这里把「创建 / 隐藏」全部丢进一个常驻线程，用 channel 收命令，
+   命令线程只负责发消息、立刻返回，绝不碰窗口 API。
 
-    /* 记住原始左边，撑开时据此重算 x，保证贴边的边不动 */
-    let dir_left = edge_side(&win) == SNAP_RIGHT; // 贴右 → 向左扩
+   内容传递也不走 eval（会同步阻塞）和 URL（卡片 HTML 太长会白屏），
+   而是写进 app_config_dir/preview-payload.json，页面自己读。
+   ============================================ */
 
-    if want_w > cur.width {
-        /* 扩大：先挪位置再改宽度，避免中间态闪到屏外 */
-        let dx = (want_w - cur.width) as i32;
-        let new_x = if dir_left { pos.x - dx } else { pos.x };
-        let _ = win.set_position(PhysicalPosition::new(new_x, pos.y));
-        let _ = win.set_size(PhysicalSize::new(want_w, cur.height));
-    } else {
-        /* 缩小：先改宽度再挪回去 */
-        let _ = win.set_size(PhysicalSize::new(want_w, cur.height));
-        let dx = (cur.width - want_w) as i32;
-        let later_x = if dir_left { pos.x + dx } else { pos.x };
-        let _ = win.set_position(PhysicalPosition::new(later_x, pos.y));
-    }
-
-    Ok(if dir_left { "left".into() } else { "right".into() })
+/// 预览窗口的工作线程命令
+enum PvCmd {
+    Show { html: String, title: String, x: i32, y: i32, w: i32, h: i32, on_right: bool },
+    Hide,
 }
 
-/// 当前贴在屏幕的哪一侧
-fn edge_side(win: &WebviewWindow) -> i32 {
-    if let Ok(Some(mon)) = win.current_monitor() {
-        let mp = mon.position();
-        let ms = mon.size();
-        if let (Ok(p), Ok(s)) = (win.outer_position(), win.outer_size()) {
-            let c = mp.x + ms.width as i32 / 2;
-            let wc = p.x + s.width as i32 / 2;
-            return if wc >= c { SNAP_RIGHT } else { SNAP_LEFT };
+/// 发往工作线程的 sender（None = 线程还没起来）
+static PV_TX: Mutex<Option<std::sync::mpsc::Sender<PvCmd>>> = Mutex::new(None);
+
+/// 预览窗口 label 的序号。
+///
+/// ⚠ 每次显示都换一个新 label：
+/// Tauri 2 在「同一个 label 反复 create/hide」时，内部注册表和窗口
+/// 实际状态会不同步 —— get_webview_window 返回 None，但 build 报
+/// "webview with label already exists"，之后再创建永远失败。
+/// 每次换新名字可以彻底绕开；关掉旧窗口也不再有 label 冲突。
+static PV_SEQ: AtomicU32 = AtomicU32::new(0);
+
+/// 启动预览窗口的工作线程。在 setup 里调一次即可。
+pub fn spawn_preview_thread(app: AppHandle) {
+    let (tx, rx) = std::sync::mpsc::channel::<PvCmd>();
+    *PV_TX.lock().unwrap_or_else(|e| e.into_inner()) = Some(tx);
+
+    let _ = std::thread::Builder::new()
+        .name("preview-win".into())
+        .spawn(move || {
+            /* 所有窗口操作都在这个线程里做，不让 IPC 线程碰 */
+            let mut cur: Option<(WebviewWindow, u32)> = None;
+
+            while let Ok(cmd) = rx.recv() {
+                match cmd {
+                    PvCmd::Hide => {
+                        /* 关掉而不是隐藏：label 用完就丢，下次换新的 */
+                        if let Some((w, _)) = cur.take() {
+                            let _ = w.destroy();
+                        }
+                    }
+                    PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
+                        /* 旧窗口先销毁 */
+                        if let Some((w, _)) = cur.take() {
+                            let _ = w.destroy();
+                            std::thread::sleep(std::time::Duration::from_millis(40));
+                        }
+
+                        /* 内容落盘，页面启动时自己读 */
+                        if let Ok(dir) = app.path().app_config_dir() {
+                            let _ = std::fs::create_dir_all(&dir);
+                            let payload = serde_json::json!({ "title": title, "html": html });
+                            if let Ok(txt) = serde_json::to_string(&payload) {
+                                let _ = std::fs::write(dir.join("preview-payload.json"), txt);
+                            }
+                        }
+
+                        let pw = 360;
+                        let gap = 10;
+                        let mut px = if on_right { x - pw - gap } else { x + sw + gap };
+
+                        /* 自纠：跑出屏幕就翻到另一边 */
+                        if let Ok(mons) = app.available_monitors() {
+                            let mut inside = false;
+                            let mut bl = i32::MIN;
+                            let mut br = i32::MAX;
+                            for m in mons {
+                                let mp = m.position();
+                                let ms = m.size();
+                                let (ml, mr) = (mp.x, mp.x + ms.width as i32);
+                                if px >= ml - pw && px <= mr {
+                                    inside = true; bl = ml; br = mr; break;
+                                }
+                            }
+                            if !inside || px < bl || px + pw > br {
+                                px = if on_right { x - pw - gap } else { x + sw + gap };
+                            }
+                        }
+
+                        let h = h.max(120);
+                        /* 前端给的是物理像素，而 inner_size/position 用逻辑像素
+                           —— 不分频的话 150% 缩放下窗口只有三分之二大 */
+                        let sc = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
+                        let sc = if sc > 0.1 { sc } else { 1.0 };
+                        let seq = PV_SEQ.fetch_add(1, Ordering::Relaxed);
+                        let label = format!("preview{}", seq);
+
+                        match WebviewWindowBuilder::new(
+                            &app, &label, WebviewUrl::App("preview.html".into())
+                        )
+                        .title("预览")
+                        .inner_size(pw as f64 / sc, h as f64 / sc)
+                        .position(px as f64 / sc, y as f64 / sc)
+                        .decorations(false)
+                        .always_on_top(true)
+                        .skip_taskbar(true)
+                        .resizable(false)
+                        .focused(false)
+                        .visible(true)
+                        .transparent(true)
+                        .shadow(false)
+                        .build()
+                        {
+                            Ok(w) => {
+                                let _ = w.set_position(PhysicalPosition::new(px, y));
+                                let _ = w.set_size(PhysicalSize::new(pw as u32, h as u32));
+                                eprintln!("[preview] 已创建 {} @ ({},{}) {}x{}", label, px, y, pw, h);
+                                cur = Some((w, seq));
+                            }
+                            Err(e) => eprintln!("[preview] 创建 {} 失败: {}", label, e),
+                        }
+                    }
+                }
+            }
+        });
+}
+
+/// 前端：显示预览
+#[tauri::command]
+pub fn preview_show(
+    _app: AppHandle,
+    html: String,
+    title: String,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    on_right: bool,
+) -> Result<(), String> {
+    let tx = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match tx {
+        Some(t) => {
+            let _ = t.send(PvCmd::Show { html, title, x, y, w, h, on_right });
+            Ok(())
         }
+        None => Err("预览线程未启动".into()),
     }
-    SNAP_RIGHT
+}
+
+/// 前端：隐藏预览
+#[tauri::command]
+pub fn preview_hide(_app: AppHandle) -> Result<(), String> {
+    let tx = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if let Some(t) = tx {
+        let _ = t.send(PvCmd::Hide);
+    }
+    Ok(())
+}
+
+/// 读取预览内容（预览窗口启动时调用）
+#[tauri::command]
+pub fn preview_payload(app: AppHandle) -> Result<String, String> {
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::read_to_string(dir.join("preview-payload.json")).map_err(|e| e.to_string())
 }
 
 /// 查询当前吸附落点（调试用）

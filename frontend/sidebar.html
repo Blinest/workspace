@@ -354,31 +354,26 @@
   .scroll > .card[hidden]{ display:none !important; }
 
   /* ================= 悬浮预览 =================
-     侧边栏只有 400px 宽，浮层放不下。做法是**临时把窗口撑开**：
-     贴右时向左扩，贴左时向右扩 —— 视觉上像抽屉从内侧滑出来，
-     贴边的那条边始终不动。撑开的宽度由 Rust 的 preview_width 命令处理，
-     前端只负责把浮层摆到新腾出来的那块空间里。
-
+     直接在侧边栏内部弹出，**不改窗口尺寸**。
+     浮层铺在卡片上方，会盖住旁边的卡片 —— 移开鼠标就消失。
      预览是**只读副本**，不响应点击，也不改变卡片本身高度。 */
   #cardPreview{
     position:fixed; z-index:9000;
-    width:340px; max-height:78vh; overflow-y:auto;
+    overflow-y:auto;
     padding:12px 14px;
-    background:rgba(255,251,238,.985);
-    border:1px solid rgba(226,214,186,.75);
+    background:rgba(255,251,238,.99);
+    border:1px solid rgba(226,214,186,.85);
     border-radius:12px;
-    box-shadow:0 4px 10px rgba(120,110,90,.1),
-               0 16px 44px rgba(120,110,90,.2),
+    box-shadow:0 4px 10px rgba(120,110,90,.14),
+               0 16px 44px rgba(120,110,90,.26),
                inset 0 1px 0 rgba(255,255,255,.95);
     color:var(--ink, #2b2a26); font-size:12px; line-height:1.65;
     opacity:0; pointer-events:none;
+    transform:translateY(4px);
     transition:opacity .18s ease, transform .18s cubic-bezier(.22,.61,.36,1);
     scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.35) transparent;
   }
-  /* 展开方向决定入场动画：向左弹就从右边滑入，反之亦然 */
-  #cardPreview.modeLeft{ transform:translateX(10px); }
-  #cardPreview.modeRight{ transform:translateX(-10px); }
-  #cardPreview.on{ opacity:1; transform:translateX(0); }
+  #cardPreview.on{ opacity:1; transform:translateY(0); }
   #cardPreview::-webkit-scrollbar{ width:6px; }
   #cardPreview::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:3px; }
   #cardPreview .pvTitle{
@@ -6941,163 +6936,168 @@
       });
     });
 
-    /* ---- 侧边预览 ---- */
-    var pv = document.createElement("div");
-    pv.id = "cardPreview";
-    pv.innerHTML = '<div class="pvTitle"><span class="pvName"></span>'
-                 + '<span class="pvHint">只读预览 · 双击卡片在侧边展开</span></div>'
-                 + '<div class="pvBody"></div>';
-    document.body.appendChild(pv);
-
-    var pvName = pv.querySelector(".pvName");
-    var pvBody = pv.querySelector(".pvBody");
+    /* ---- 侧边预览 ----
+      侧边栏本身尺寸始终不变（400px）。
+      悬停时把卡片内容交给一个**独立预览窗口**：由 Rust 创建，
+      浮在侧边栏未贴附的那一侧 —— 贴右屏就浮在左边，贴左屏就浮在右边。
+      鼠标离开即隐藏。 */
     var showTimer = null, hideTimer = null, curCard = null;
 
-    /* 侧边栏只有 400px 宽，浮层放不下 —— 悬停时临时把窗口撑开。
-       番茄钟不放预览：它内容紧凑，撑开再收起会让计时器视觉上跳一下。 */
-    var EXPAND_PX = 348;
-    var expandedNow = false;
-    var expandDir = "left";
-
-    function setExpand(on){
-      if (expandedNow === on) return;
-      expandedNow = on;
+    function invokeP(cmd, args){
       try {
         var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
-        if (!inv) return;
-        inv("preview_width", { extra: on ? EXPAND_PX : 0 }).then(function(dir){
-          if (dir) expandDir = String(dir);
-          if (on && curCard) {
-            setTimeout(function(){ if (curCard) placePreview(curCard); }, 80);
-          }
-        }).catch(function(){});
-      } catch(e){}
+        return inv ? inv(cmd, args || {}) : Promise.reject(new Error("no invoke"));
+      } catch(e) { return Promise.reject(e); }
     }
 
-    function placePreview(anchor){
-      var w = 340;
-      var vw = window.innerWidth || 400;
-      var vh = window.innerHeight || 900;
-      var r = anchor.getBoundingClientRect();
-
-      var left = (expandDir === "right") ? (r.right + 8) : 8;
-      if (left + w > vw - 4) left = Math.max(4, vw - w - 4);
-      var top = Math.max(8, Math.min(r.top, vh - 140));
-      var maxH = Math.min(Math.round(vh * 0.78), vh - top - 10);
-
-      pv.style.cssText = "position:fixed;left:" + Math.round(left) + "px;top:" + Math.round(top)
-        + "px;width:" + w + "px;max-height:" + Math.max(160, maxH) + "px;z-index:9000;"
-        + "overflow-y:auto;padding:12px 14px;box-sizing:border-box;"
-        + "background:rgba(255,251,238,.985);border:1px solid rgba(226,214,186,.75);"
-        + "border-radius:12px;box-shadow:0 4px 10px rgba(120,110,90,.1),0 16px 44px rgba(120,110,90,.2);"
-        + "color:#2b2a26;font-size:12px;line-height:1.65;"
-        + "scrollbar-width:thin;transition:opacity .18s ease;";
-    }
-
-    function doShow(card){
-      var h3 = card.querySelector("h3");
-      if (!h3) return;
-
-      var nameEl = h3.cloneNode(true);
-      var tb = nameEl.querySelector(".cardToggle");
-      if (tb) tb.remove();
-      pvName.textContent = (nameEl.textContent || "").trim() || "预览";
-
-      /* 复制内容（跳过标题），剥掉 id 和交互能力 */
-      var frag = document.createDocumentFragment();
+    /* 抓卡片内容为 HTML 片段（跳过标题行，去掉 id 与交互能力） */
+    function grabHtml(card){
+      var box = document.createElement("div");
       Array.prototype.forEach.call(card.children, function(ch){
         if (ch.tagName === "H3") return;
         var cp = ch.cloneNode(true);
         if (cp.querySelectorAll) {
           Array.prototype.forEach.call(cp.querySelectorAll("[id]"), function(n){ n.removeAttribute("id"); });
-          Array.prototype.forEach.call(cp.querySelectorAll("input,select,button,textarea"), function(n){
-            if (n.tagName === "INPUT" && n.type === "checkbox") { n.disabled = true; return; }
-            n.style.pointerEvents = "none";
-          });
         }
         cp.removeAttribute && cp.removeAttribute("id");
-        frag.appendChild(cp);
+        box.appendChild(cp);
       });
-      pvBody.innerHTML = "";
-      pvBody.appendChild(frag);
+      return box.innerHTML;
+    }
 
+    function cardTitle(card){
+      var h3 = card.querySelector("h3");
+      if (!h3) return "预览";
+      var clone = h3.cloneNode(true);
+      var tb = clone.querySelector(".cardToggle");
+      if (tb) tb.remove();
+      return (clone.textContent || "").trim() || "预览";
+    }
+
+    /* 侧边栏自己的屏幕位置（Rust 那边不查窗口表 —— 会死锁）。
+       用 window.screenX/screenY + 当前缩放换算成物理像素。 */
+    function sideGeom(){
+      var dpr = window.devicePixelRatio || 1;
+      /* screenX/screenY 是 CSS 像素；乘 dpr 得到物理像素 */
+      var sx = Math.round((window.screenX || 0) * dpr);
+      var sy = Math.round((window.screenY || 0) * dpr);
+      var sw = Math.round((window.outerWidth || window.innerWidth || 400) * dpr);
+      var sh = Math.round((window.outerHeight || window.innerHeight || 900) * dpr);
+
+      /* 判断贴左还是贴右：
+         用 RUST 给的是否贴右（它知道当前在哪块屏），
+         没有就退回「窗口中心 vs 屏幕右边」的粗略判断。
+         不能只用 screen.availWidth —— 副屏时那个值属于主屏，会判错。 */
+      var onRight;
+      if (typeof window.__onRight === "boolean") {
+        onRight = window.__onRight;
+      } else {
+        var avail = (window.screen && window.screen.availWidth ? window.screen.availWidth : 1920) * dpr;
+        /* 窗口右边缘离屏幕右边缘很近 → 认为贴右 */
+        onRight = (sx + sw) >= (avail - sw * 0.6);
+      }
+      return { x: sx, y: sy, w: sw, h: sh, onRight: onRight };
+    }
+
+    function doShow(card){
+      if (!card.querySelector("h3")) return;
       curCard = card;
-      setExpand(true);
-      /* 等窗口撑开后再摆位，否则量到的是旧宽度。
-         ⚠ 这期间会触发一次 resize —— 上面的 resize 监听只重排不关闭，
-         否则会出现「刚弹出就被自己撑开的窗口 resize 掉」。 */
-      setTimeout(function(){
-        if (curCard !== card) return;
-        placePreview(card);
-        pv.style.opacity = "1";
-        pv.classList.add("on");
-      }, 90);
+      var g = sideGeom();
+      invokeP("preview_show", {
+        html: grabHtml(card),
+        title: cardTitle(card),
+        x: g.x, y: g.y, w: g.w, h: g.h, onRight: g.onRight
+      }).catch(function(){});
     }
 
     function doHide(){
-      pv.style.opacity = "0";
-      pv.classList.remove("on");
       curCard = null;
-      setExpand(false);
+      invokeP("preview_hide").catch(function(){});
     }
 
-    /* ⚠ 用事件委托挂在 #scroll 上，而不是逐张卡片 addEventListener。
-       卡片内容会被 renderTodos 等频繁重绘，逐张绑定容易绑到已经被
-       替换掉的旧节点上 —— 那样监听器还在，但永远不触发。
-       委托的好处：不管卡片什么时候出现/重建，事件都能接住。 */
+    /* 事件委托 + 定时兜底。
+       mouseout 的 relatedTarget 在某些情况下是 null（比如鼠标移出窗口），
+       光靠它判断容易漏掉，所以再加一个「鼠标还在不在卡片上」的轮询。 */
     var hoverCard = null;
+    var pollId = null;
 
-    scrollEl.addEventListener("mouseover", function(ev){
-      var card = ev.target && ev.target.closest ? ev.target.closest(".scroll > .card") : null;
-      if (!card) card = (ev.target && ev.target.closest) ? ev.target.closest(".card") : null;
-      if (!card || card.hasAttribute("hidden")) return;
-      if (card.id === "cardPomo") return;          /* 番茄钟不弹预览 */
-      if (card === hoverCard) return;
-      hoverCard = card;
+    function cardUnder(clientX, clientY){
+      var el = document.elementFromPoint(clientX, clientY);
+      if (!el || !el.closest) return null;
+      var card = el.closest(".card");
+      if (!card || card.hasAttribute("hidden")) return null;
+      if (card.id === "cardPomo") return null;
+      return card;
+    }
 
+    function stopPoll(){
+      if (pollId) { clearInterval(pollId); pollId = null; }
+    }
+
+    function scheduleShow(card){
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       if (showTimer) clearTimeout(showTimer);
+      if (curCard === card) return;
       showTimer = setTimeout(function(){
         showTimer = null;
         if (hoverCard === card) doShow(card);
       }, 420);
+    }
+
+    function scheduleHide(){
+      hoverCard = null;
+      if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 220);
+    }
+
+    scrollEl.addEventListener("mouseover", function(ev){
+      var t = ev.target;
+      var card = (t && t.closest) ? t.closest(".card") : null;
+      if (!card || card.hasAttribute("hidden")) return;
+      if (card.id === "cardPomo") return;
+      if (card === hoverCard) return;
+
+      hoverCard = card;
+      scheduleShow(card);
+
+      /* 开始轮询：鼠标离开卡片区域就收起 */
+      stopPoll();
+      pollId = setInterval(function(){
+        if (!hoverCard) { stopPoll(); return; }
+        /* 窗口失焦或鼠标已经在卡片外 → 收起 */
+        var x = window.__lastMouseX, y = window.__lastMouseY;
+        if (x == null || y == null) return;
+        var now = cardUnder(x, y);
+        if (now !== hoverCard) scheduleHide();
+      }, 300);
+    }, true);
+
+    /* 记录鼠标位置（给轮询用） */
+    scrollEl.addEventListener("mousemove", function(ev){
+      window.__lastMouseX = ev.clientX;
+      window.__lastMouseY = ev.clientY;
+    }, true);
+    document.addEventListener("mousemove", function(ev){
+      window.__lastMouseX = ev.clientX;
+      window.__lastMouseY = ev.clientY;
     }, true);
 
     scrollEl.addEventListener("mouseout", function(ev){
       var to = ev.relatedTarget;
-      /* 还在同一张卡片内部移动 → 什么都不做 */
-      var from = ev.target && ev.target.closest ? ev.target.closest(".card") : null;
-      var into = to && to.closest ? to.closest(".card") : null;
+      /* 完全移出窗口（relatedTarget 为 null）→ 收起 */
+      if (!to) { scheduleHide(); return; }
+      var from = (ev.target && ev.target.closest) ? ev.target.closest(".card") : null;
+      var into = (to.closest) ? to.closest(".card") : null;
       if (from && into && from === into) return;
       if (!from) return;
-
-      hoverCard = null;
-      if (showTimer) { clearTimeout(showTimer); showTimer = null; }
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 180);
+      scheduleHide();
     }, true);
 
-    /* 鼠标移到预览上时不消失，方便滚动查看 */
-    pv.addEventListener("mouseenter", function(){
-      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    });
-    pv.addEventListener("mouseleave", function(){
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 180);
-    });
+    /* 鼠标离开整个窗口 = 一定收起 */
+    document.addEventListener("mouseleave", function(){ scheduleHide(); });
+    window.addEventListener("blur", function(){ scheduleHide(); });
 
-    /* 滚动后卡片位置变了，预览的位置就对不上了 → 关掉。
-       ⚠ resize 不处理在这个列表里：撑开预览本身就会改窗口宽度，
-       一 resize 就关会变成「弹出即消失」。 */
-    scrollEl.addEventListener("scroll", function(){ if (curCard) doHide(); }, { passive: true });
-    window.addEventListener("resize", function(){
-      /* 撑开/收起自己引起的 resize：只重排位置，别关 */
-      if (curCard) {
-        placePreview(curCard);
-        pv.style.opacity = "1";
-        pv.classList.add("on");
-      }
-    });
     document.addEventListener("keydown", function(e){
       if (e.key === "Escape" && curCard) doHide();
     });
