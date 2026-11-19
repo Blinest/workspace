@@ -1519,18 +1519,18 @@
     if (_pct >= 100) _pct = 100;
     var pctCls = _pct >= 100 ? 'full' : (_pct >= 60 ? 'high' : (_pct >= 30 ? 'mid' : 'low'));
     var pctBadge = (_pct > 0 && !x.done)
-      ? '<button class="stepPct ' + pctCls + '" data-step-pct="' + di + ':' + si + '"'
+      ? '<button class="stepPct ' + pctCls + '" data-step-pct="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '"'
         + ' title="这一步已完成 ' + _pct + '%，点一下调整">' + _pct + '%</button>'
       : '<button class="stepPct none" data-step-pct="' + di + ':' + si + '"'
         + ' title="标记这一步做了多少（用于部分计分）">%</button>';
 
-    return '<li class="' + (x.done ? "done" : "") + '" data-ti="' + di + '" data-si="' + si + '" title="点击标记完成">'
-               + '<span class="bx"></span><span class="subTxt" data-edit-sub="' + di + ':' + si + '" title="双击修改这个步骤">' + esc(x.text) + '</span>'
+    return '<li class="' + (x.done ? "done" : "") + '" data-ti="' + di + '" data-fi="' + ti + '" data-si="' + si + '" title="点击标记完成">'
+               + '<span class="bx"></span><span class="subTxt" data-edit-sub="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="双击修改这个步骤">' + esc(x.text) + '</span>'
                + badge
                + pctBadge
-               + '<button class="stepPomo" data-act="steplog" data-ti="' + di + '" data-si="' + si + '" title="给这一步记一个番茄">🍅</button>'
-               + '<button class="stepIns" data-step-ins="' + di + ':' + si + '" title="在这一步后面插入新步骤">＋</button>'
-               + '<button class="stepDel" data-step-del="' + di + ':' + si + '" title="删除这一步">✕</button>'
+               + '<button class="stepPomo" data-act="steplog" data-ti="' + di + '" data-fi="' + ti + '" data-si="' + si + '" title="给这一步记一个番茄">🍅</button>'
+               + '<button class="stepIns" data-step-ins="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="在这一步后面插入新步骤">＋</button>'
+               + '<button class="stepDel" data-step-del="' + di + ':' + si + '" data-ti="' + di + '" data-fi="' + ti + '" title="删除这一步">✕</button>'
                + '</li>'
                /* 进度调节条（点百分比后出现） */
                + (stepPctFor === (di + ':' + si)
@@ -1699,6 +1699,16 @@
       var _today = todayStr();
       var _all = raw.items;
 
+      /* ⚠ 关键：给完整数组的每个元素挂上它的真实下标（__oi）。
+         必须在 filter 之前、对**完整数组**做 ——
+         因为在 filter 里用过滤后的序号赋 __oi，
+         一旦有任务被过滤掉，__oi 就不是真实下标了，
+         回写时会改错任务（番茄记到别人身上、删错步骤）。
+         __oi 不落盘（saveToStorage 前会被清掉），只用于本次渲染。 */
+      for (var _i = 0; _i < _all.length; _i++) {
+        if (_all[_i]) _all[_i].__oi = _i;
+      }
+
       /* 把 doneAt 统一转成 YYYY-MM-DD。
          ⚠ doneAt 可能是：
             · 毫秒时间戳（数字）   ← 大多数情况
@@ -1742,9 +1752,9 @@
       }
 
       raw = Object.assign({}, raw, {
-        items: _all.filter(function(t, oi){
+        items: _all.filter(function(t){
           if (!t) return false;
-          t.__oi = oi;                              /* 快照里的真实下标 */
+          /* __oi 已在上面按完整数组挂好，这里绝不能覆盖 */
           if (t.hist) return false;                 /* 明确标了历史的就跳过 */
 
           var subs = t.subs || [];
@@ -1778,7 +1788,7 @@
        + '<span>预计 <b>' + (s.planMins/60).toFixed(1) + '</b> 小时</span>'
        + '<span>平均难度 <b>' + s.avgLv + '</b></span>'
        + '</div>';
-    h += '<div class="addRow"><button class="addTask" title="新增一条待办">＋ 新增待办</button></div>';
+    h += '<div class="addRow"><button class="addTask" data-act="addtask" title="新增一条待办">＋ 新增待办</button></div>';
 
     /* 按项目（顶层文档）分组。
        idx 存的是过滤后数组里的位置（取数据用），
@@ -7533,6 +7543,8 @@
 
     /* 抓卡片内容为 HTML 片段（跳过标题行，去掉 id 与交互能力） */
     function grabHtml(card){
+      /* 卡片可能已经不在文档里（视图切走了），别让异常打断整个流程 */
+      if (!card || !card.querySelector) return "";
       /* 卡片里可能有个 .todoDetail 装着完整明细（卡片本身只显示精简版）。
          浮层要的是**完整内容**，所以优先取它。 */
       var detail = card.querySelector(".todoDetail") || card.querySelector(".dbDetail") || card.querySelector(".docDetail");
@@ -7634,6 +7646,10 @@
     function startPoll(){
       stopPoll();
       pollTimer = setInterval(function(){
+        /* 只让它维护「钉住」状态，不要用它来清 curCard ——
+           Show 内部会先 destroy 旧窗再建新窗，中间有一瞬是"不存在"，
+           轮询正好读到就会把 curCard 误清掉，
+           导致后续所有推送都被 if (!curCard) 跳过。 */
         invokeP("preview_poll").catch(function(){});
       }, 220);
     }
@@ -7674,6 +7690,52 @@
       stopPoll();
       invokeP("preview_hide").catch(function(){});
     }
+
+    /* 光标是否**真的**还在浮层里：
+       标记为 true 且最近 1.5 秒内有心跳。
+       没有心跳说明浮层那边没机会回报（鼠标直接拖出去、
+       或者压根没进去），就当作已离开，不要挡住关闭。 */
+    function ptrReallyInside(){
+      if (!window.__pointerInPreview) return false;
+      var at = window.__ptrInsideAt || 0;
+      return (Date.now() - at) < 1500;
+    }
+
+    /* ---- 光标是否在浮层里 ----
+       浮层自己会回报（preview-pointer 事件）。
+       在里面时绝不能关窗口 —— 用户正在操作。
+       离开时给一点缓冲，方便从浮层移回卡片而不闪。 */
+    window.__pointerInPreview = false;
+    var ptrLeaveTimer = null;
+    (function(){
+      function bindPointer(){
+        try {
+          var ev = window.__TAURI__ && window.__TAURI__.event;
+          if (ev && ev.listen) {
+            ev.listen("preview-pointer", function(e){
+              var p = e && e.payload ? e.payload : e;
+              var inside = !!(p && p.inside);
+              if (inside) {
+                if (ptrLeaveTimer) { clearTimeout(ptrLeaveTimer); ptrLeaveTimer = null; }
+                window.__pointerInPreview = true;
+                window.__ptrInsideAt = Date.now();   /* 心跳时间 */
+                hideTimer && clearTimeout(hideTimer), hideTimer = null;
+              } else {
+                if (ptrLeaveTimer) clearTimeout(ptrLeaveTimer);
+                ptrLeaveTimer = setTimeout(function(){
+                  ptrLeaveTimer = null;
+                  window.__pointerInPreview = false;
+                  window.__ptrInsideAt = 0;
+                }, 250);
+              }
+            });
+            return true;
+          }
+        } catch(e){}
+        return false;
+      }
+      if (!bindPointer()) setTimeout(bindPointer, 800);
+    })();
 
     /* 事件委托 + 定时兜底。
        mouseout 的 relatedTarget 在某些情况下是 null（比如鼠标移出窗口），
@@ -7794,6 +7856,26 @@
         var kind = p.kind;
         var d = p.data || {};
 
+        /* ---- 统一下标解析 ----
+           d.fi = 过滤后数组里的位置（从 raw.items 取对象用）
+           d.ti = 快照里的真实下标（回写/记录用）
+           预览里点的是渲染出来的元素，两个值都带上了；
+           老版本只带 ti 的，fi 退化为 ti（未过滤时两者相同）。 */
+        function pickFi(){
+          var fi = d.fi != null ? +d.fi : null;
+          if (fi == null || isNaN(fi)) fi = d.ti != null ? +d.ti : null;
+          return fi;
+        }
+        function pickTi(){
+          var ti = d.ti != null ? +d.ti : null;
+          if (ti == null || isNaN(ti)) ti = pickFi();
+          return ti;
+        }
+        /* "ti:si" / "fi:si" 形式（步骤类） */
+        function pickKey(){
+          var parts = String(d.key || "").split(":");
+          return { a: +parts[0], b: +parts[1] };
+        }
         var raw = null;
         try { raw = JSON.parse(localStorage.getItem(TODOS_KEY) || "null"); } catch(e){}
         if (!raw || !raw.items) return;
@@ -7803,21 +7885,63 @@
         try {
           /* ---- 通用动作（番茄记录等）---- */
           if (kind === "act" && d.act) {
-            var ti = d.ti != null ? +d.ti : null;
-            var si = d.si != null ? +d.si : null;
-            if (ti != null && !isNaN(ti)) doTaskAction(ti, d.act, si);
-            changed = true;
+            /* 新增待办：无目标的动作，不走 doTaskAction */
+            if (d.act === "addtask") {
+              raw.items.push({
+                name: "新待办",
+                date: todayStr(),
+                subs: [],
+                mins: 60,
+                lv: 3,
+                q: "iu",
+                important: true
+              });
+              changed = true;
+            } else {
+              /* ⚠ doTaskAction 会自己读 localStorage、改、写回并重绘。
+                 所以这里**不能**再让外层用旧 raw 覆盖它 ——
+                 否则刚记的番茄会被冲掉（看起来"番茄记不上"）。
+                 做完直接 return，走完自己的刷新逻辑。 */
+              var fiA = d.fi != null ? +d.fi : (d.ti != null ? +d.ti : null);
+              var siA = d.si != null ? +d.si : null;
+              if (fiA != null && !isNaN(fiA)) {
+                /* ⚠ 番茄按钮（act=steplog）的语义是**启动计时**，
+                   不是直接记一条番茄。
+                   侧边栏自己的点击走 ptStartForStep(ti, si)，
+                   预览转发必须用同一个入口，否则会变成
+                   「凭空记 25 分钟」而不是「开始计时」。 */
+                if (d.act === "steplog" && siA != null && !isNaN(siA)
+                    && typeof ptStartForStep === "function") {
+                  try { ptStartForStep(fiA, siA); } catch(eP){}
+                } else {
+                  try { doTaskAction(fiA, d.act, siA); } catch(eA){}
+                }
+              }
+              /* 让浮层拿到新内容 */
+              if (curCard) {
+                try {
+                  invokeP("preview_update", {
+                    html: grabHtml(curCard) || "",
+                    title: cardTitle(curCard)
+                  }).catch(function(){});
+                } catch(eU){}
+              }
+              return;   /* 已自行处理完毕，不走外层的保存/刷��� */
+            }
           }
 
           /* ---- 点步骤 = 切换完成 ---- */
           else if (kind === "toggleSub") {
-            var ti2 = +d.ti, si2 = +d.si;
-            var t2 = raw.items[ti2];
+            var fi2 = pickFi(), si2 = +d.si;
+            var t2 = raw.items[fi2];
             var s2 = t2 && (t2.subs || [])[si2];
             if (s2) {
               s2.done = !s2.done;
               s2.doneAt = s2.done ? Date.now() : null;
-              if (s2.done) s2.pct = 100;
+              /* 完成 → 100%；取消完成 → 归零。
+                 ⚠ 以前取消时不动 pct，会留下「未完成但 100%」的
+                 矛盾状态，界面上像"点了没反应"。 */
+              s2.pct = s2.done ? 100 : 0;
               changed = true;
             }
           }
@@ -7865,8 +7989,13 @@
 
           /* ---- 改任务名 ---- */
           else if (kind === "editName") {
-            var parts2 = String(d.key || "").split(":");
-            var t6 = raw.items[+parts2[1]];
+            /* key 形如 "name:di:0" —— 但更可靠的是直接用 d.fi / d.ti */
+            var fi6 = pickFi();
+            if (fi6 == null) {
+              var p6 = String(d.key || "").split(":");
+              fi6 = +p6[1];
+            }
+            var t6 = raw.items[fi6];
             if (t6 && d.text) { t6.name = String(d.text); changed = true; }
           }
 
@@ -7880,7 +8009,7 @@
             setTimeout(function(){
               if (!curCard) return;
               invokeP("preview_update", {
-                html: grabHtml(curCard),
+                html: grabHtml(curCard) || "",
                 title: cardTitle(curCard)
               }).catch(function(){});
             }, 100);
@@ -7900,7 +8029,7 @@
             setTimeout(function(){
               if (!curCard) return;
               invokeP("preview_update", {
-                html: grabHtml(curCard),
+                html: grabHtml(curCard) || "",
                 title: cardTitle(curCard)
               }).catch(function(){});
             }, 120);
@@ -7908,6 +8037,87 @@
           }
 
           /* ---- 改步骤名 ---- */
+          else if (kind === "editSub") {
+            var partsE = String(d.key || "").split(":");
+            var tiE = +partsE[0], siE = +partsE[1];
+            var tE = raw.items[tiE];
+            var sE = tE && (tE.subs || [])[siE];
+            if (sE && d.text) { sE.text = String(d.text); changed = true; }
+          }
+
+          /* ---- 番茄预备面板：开始 ---- */
+          else if (kind === "prepGo") {
+            var pTi = d.ti != null ? +d.ti : null;
+            var pSi = d.si != null ? +d.si : null;
+            var pMin = +d.min || 25;
+            var pNote = String(d.note || "");
+            /* 真实下标 → 当前数组位置（两者在未过滤时相同） */
+            var pFi = pTi;
+            for (var pk = 0; pk < raw.items.length; pk++) {
+              if (raw.items[pk] && raw.items[pk].__oi === pTi) { pFi = pk; break; }
+            }
+            pomoPrepSide = null;
+            try { renderTodos(true); } catch(e){}
+            try { ptStartNow(pFi, pSi, pMin, pNote); } catch(eP0){}
+            if (curCard) {
+              try {
+                invokeP("preview_update", {
+                  html: grabHtml(curCard) || "",
+                  title: cardTitle(curCard)
+                }).catch(function(){});
+              } catch(eU0){}
+            }
+            return;
+          }
+
+          /* ---- 番茄预备面板：取消 ---- */
+          else if (kind === "prepCancel") {
+            pomoPrepSide = null;
+            try { renderTodos(true); } catch(e){}
+            if (curCard) {
+              try {
+                invokeP("preview_update", {
+                  html: grabHtml(curCard) || "",
+                  title: cardTitle(curCard)
+                }).catch(function(){});
+              } catch(eU1){}
+            }
+            return;
+          }
+
+          /* ---- 插入步骤 ---- */
+          else if (kind === "stepIns") {
+            var k8 = pickKey();
+            var t8 = raw.items[k8.a];
+            if (t8 && t8.subs) {
+              t8.subs.splice(k8.b + 1, 0, { text: "新步骤", done: false, pct: 0 });
+              changed = true;
+            }
+          }
+
+          /* ---- 删除步骤 ---- */
+          else if (kind === "stepDel") {
+            var k9 = pickKey();
+            var t9 = raw.items[k9.a];
+            if (t9 && t9.subs && t9.subs.length > k9.b) {
+              t9.subs.splice(k9.b, 1);
+              changed = true;
+            }
+          }
+
+          /* ---- 给步骤记番茄 ---- */
+          else if (kind === "stepPomo") {
+            var tiA = pickFi(), siA = +d.si;
+            var tA = raw.items[tiA];
+            var sA = tA && (tA.subs || [])[siA];
+            if (sA) {
+              sA.done = true;
+              sA.doneAt = Date.now();
+              sA.pct = 100;
+              changed = true;
+            }
+          }
+
           else if (kind === "editSub") {
             var parts3 = String(d.key || "").split(":");
             var t7 = raw.items[+parts3[0]];
@@ -7920,23 +8130,39 @@
 
         if (changed) {
           raw.at = Date.now();
+          /* ⚠ __oi 只是渲染期的辅助下标，绝不能落盘 ——
+             落盘后下次读出来是旧值，会导致越改越错。 */
+          try {
+            raw.items.forEach(function(t){ if (t) delete t.__oi; });
+          } catch(e){}
           try { localStorage.setItem(TODOS_KEY, JSON.stringify(raw)); } catch(e){}
           window.__selfWrite = localStorage.getItem(TODOS_KEY);
-          /* 让主界面也跟着更新 */
-          try { if (typeof renderTodos === "function") renderTodos(); } catch(e){}
+          /* 让主界面也跟着更新。
+             ⚠ 必须传 force=true：renderTodos 有内容签名节流，
+             某些情况下签名相同就直接返回，DOM 不重建，
+             接着 grabHtml 抓到的还是旧状态，浮层就不刷新。 */
+          try { if (typeof renderTodos === "function") renderTodos(true); } catch(e){}
           try { if (typeof renderWeek === "function") renderWeek(); } catch(e){}
         }
 
         /* 动作执行完刷新浮层内容。
            ⚠ 用 preview_update 而不是 doShow —— 后者会销毁重建窗口，
-           用户连着点几下会被打断，还会闪。 */
-        setTimeout(function(){
-          if (!curCard) return;
-          invokeP("preview_update", {
-            html: grabHtml(curCard),
-            title: cardTitle(curCard)
-          }).catch(function(){});
-        }, 260);
+           用户连着点几下会被打断，还会闪。
+
+           ⚠⚠ 不要 setTimeout 延迟：延迟窗口里如果鼠标稍微一动，
+           preview_poll 会判定「离开浮层」把窗口隐藏、curCard 置空，
+           这次推送就被 if (!curCard) 直接跳过了 ——
+           表现就是「点了没反应，关掉浮层重开才对」。
+           必须**同步**推。 */
+        if (curCard) {
+          var _cardForPush = curCard;
+          try {
+            invokeP("preview_update", {
+              html: grabHtml(_cardForPush),
+              title: cardTitle(_cardForPush)
+            }).catch(function(){});
+          } catch(e){}
+        }
       });
     })();
 
@@ -7949,7 +8175,12 @@
      用「归一化后的 HTML 签名」比对，避免无谓推送。 */
   (function(){
     var lastSig = "";
-    var busy = false;
+    /* ⚠ 不要用 busy 布尔锁：
+       如果 invoke 既不 resolve 也不 reject（窗口刚好没了、IPC 挂起），
+       busy 会永远停在 true，推送彻底停摆 —— 表现就是
+       「点了没反应，必须关掉浮层再开才好」。
+       改成「上次推送的时间戳」节流：超过 300ms 就允许再推。 */
+    var lastPushAt = 0;
     window.__pushCount = 0;
     window.__pushSkip = 0;
 
@@ -7964,9 +8195,12 @@
     }
 
     function push(){
-      if (busy) { window.__pushSkip++; return; }
       /* 侧边栏正在重绘：此刻 DOM 是中间态，等下一轮 */
       if (window.__repainting) { window.__pushSkip++; return; }
+
+      var now = Date.now();
+      if (now - lastPushAt < 300) return;    /* 节流，避免刷太密 */
+
       try {
         var card = window.__curCardRef ? window.__curCardRef() : null;
         if (!card) return;
@@ -7980,17 +8214,18 @@
         var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
         if (!inv) return;
 
-        busy = true;
+        lastPushAt = now;
         var title = window.__cardTitleRef ? window.__cardTitleRef(card) : "预览";
         window.__pushCount++;
-        inv("preview_update", { html: h, title: title })
-          .then(function(){ busy = false; })
-          .catch(function(){ busy = false; });
-      } catch(e){ busy = false; }
+        inv("preview_update", { html: h, title: title }).catch(function(){
+          /* 推失败就把签名清掉，下一轮重试 */
+          lastSig = "";
+        });
+      } catch(e){ lastSig = ""; }
     }
 
     /* 浮层一打开就把 lastSig 清空，保证第一次一定推 */
-    window.__resetPushSig = function(){ lastSig = ""; };
+    window.__resetPushSig = function(){ lastSig = ""; lastPushAt = 0; };
 
     setInterval(push, 400);
   })();

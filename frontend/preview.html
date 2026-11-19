@@ -861,6 +861,8 @@
   var askCancel = document.getElementById("askCancel");
   var askResolve = null;
   var askIsConfirm = false;
+  /* 待删除的任务下标，点「确定」时用它 */
+  window.__pendingDelIdx = null;
 
   function closeAsk(val){
     askMask.classList.remove("on");
@@ -917,9 +919,23 @@
     try {
       var p = typeof payload === "string" ? JSON.parse(payload) : payload;
       if (!p) return;
+      /* ⚠ 正在双击编辑时不要重建 DOM ——
+         重建会把编辑中的元素整个换掉：光标丢失、打到一半的字没了，
+         看起来就是「双击后突然刷新」。
+         用 window 标记而不是局部变量，避免声明顺序（TDZ）问题。 */
+      /* 正在编辑文字，或者百分比滑动条开着 —— 都不要重建 DOM。
+         重建会把正在操作的控件弹掉，看起来就是"突然刷新"。 */
+      if (window.__editing || window.__pctBoxOpen) return;
       nameEl.textContent = p.title || "预览";
-      bodyEl.innerHTML = p.html || "";
-      bindActions();
+      var _h = p.html || "";
+      /* ⚠ 内容完全一样就不要碰 DOM。
+         以前无条件重赋值，每 200ms 重建一次全部节点，
+         导致图标 hover 状态反复重置（看起来"一直在跳"），
+         而且每次重建都重新绑事件，可能吞掉点击。 */
+      if (bodyEl.innerHTML !== _h) {
+        bodyEl.innerHTML = _h;
+        bindActions();
+      }
     } catch(e) {
       bodyEl.textContent = "（内容解析失败）";
     }
@@ -948,14 +964,66 @@
     return null;
   }
 
+  /* 去重：同一次物理点击有时会触发多次 send（多个监听器叠加、
+     或合成事件），导致 toggleSub 被翻转偶数次 = 看起来没反应。
+     这里按「动作+目标」做 250ms 去重。 */
+  var _lastSendKey = "";
+  var _lastSendAt = 0;
+
   function send(kind, data){
-    invoke("preview_action", { kind: kind, data: data }).catch(function(){});
+    var key = kind + "|" + (data ? JSON.stringify(data) : "");
+    var now = Date.now();
+    if (key === _lastSendKey && now - _lastSendAt < 250) {
+      return;   /* 250ms 内的重复触发，忽略 */
+    }
+    _lastSendKey = key;
+    _lastSendAt = now;
+    try {
+      invoke("preview_action", { kind: kind, data: data }).catch(function(){});
+    } catch(e){}
   }
+
 
   /* ⚠ 监听器绑在 **document** 而不是 bodyEl：
        render() 每次替换 bodyEl 的子节点，如果绑定挂在子节点上会失效；
        挂在 bodyEl 本身有时也会因为时序问题拿不到新节点。
        绑定到 document 一次，永久有效。 */
+  /* ================= 光标进出回报 =================
+     侧边栏需要知道光标是不是在浮层里 —— 在里面就绝不能关窗口。
+     以前它靠猜（elementFromPoint 在侧边栏里找卡片），
+     光标一进浮层就找不到卡片，于是把窗口关掉了。 */
+  function reportPointer(inside){
+    try {
+      invoke("preview_pointer", { inside: inside }).catch(function(){});
+    } catch(e){}
+  }
+
+  (function(){
+    var wasIn = false;
+    document.addEventListener("mouseover", function(){
+      if (!wasIn) { wasIn = true; reportPointer(true); }
+    }, true);
+    document.addEventListener("mousemove", function(){
+      if (!wasIn) { wasIn = true; reportPointer(true); }
+    }, true);
+    document.addEventListener("mouseout", function(ev){
+      if (ev.relatedTarget) return;      /* 还在页面里 */
+      if (wasIn) { wasIn = false; reportPointer(false); }
+    }, true);
+    document.addEventListener("mouseleave", function(){
+      if (wasIn) { wasIn = false; reportPointer(false); }
+    }, true);
+
+    /* ⚠ 不要"启动即回报 inside=true"。
+       浮层是鼠标悬停时弹出的，此时光标还在侧边栏的卡片上，
+       根本没进浮层。虚假回报会让侧边栏把 __pointerInPreview 置 true，
+       而浮层又收不到后续 mouseout（鼠标压根没进来过），
+       这个标记就永远清不掉 —— 于是 scheduleHide 一直被挡，
+       浮层再也关不掉。
+
+       改成：只在**真的**收到鼠标事件时才回报 true。 */
+  })();
+
   function bindActions(){
     if (window.__pvBound) return;
     window.__pvBound = true;
@@ -964,6 +1032,8 @@
     /* ---------- 单击 ---------- */
     bindTarget.addEventListener("click", function(ev){
       var t = ev.target;
+      /* 确认框/输入框里的点击由它们自己的监听器处理，别在这儿拦 */
+      if (t && t.closest && t.closest("#askMask")) return;
       if (!t || !t.getAttribute) return;
 
       /* 1. 百分比按钮：展开一条滑动条（和侧边栏一样，不用弹框） */
@@ -993,9 +1063,10 @@
       if (del) {
         ev.preventDefault();
         ev.stopPropagation();
-        askConfirm("确定删除这条待办？").then(function(ok){
-          if (ok) send("deltask", { idx: del.getAttribute("data-deltask") });
-        });
+        /* 直接删，不弹框 —— 确认框在浮层里和点击委托打架，实测不可靠。
+           删错了可以从云端拉回来。 */
+        var _dIdx = del.getAttribute("data-deltask");
+        if (_dIdx != null) send("deltask", { idx: _dIdx });
         return;
       }
 
@@ -1024,6 +1095,56 @@
         return;
       }
 
+      /* 4.4 番茄预备面板：开始 / 取消 */
+      var prepCancel = closestData(t, "data-prep-cancel");
+      if (prepCancel) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("prepCancel", {});
+        return;
+      }
+      var prepGo = t.closest ? t.closest(".stepPrepGo") : null;
+      if (prepGo) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        /* 从按钮往上找预备框，读出时长和说明 */
+        var box = prepGo.closest("li.stepPrep") || prepGo.parentNode;
+        var mi = box ? box.querySelector(".stepPrepMin") : null;
+        var nt = box ? box.querySelector(".stepPrepNote") : null;
+        var mins = mi ? (Math.round(Number(mi.value) || 0)) : 0;
+        if (!(mins > 0)) mins = 25;
+        send("prepGo", {
+          ti: box ? box.getAttribute("data-prep-ti") : null,
+          si: box ? box.getAttribute("data-prep-si") : null,
+          min: mins,
+          note: nt ? String(nt.value || "").trim() : ""
+        });
+        return;
+      }
+
+      /* 4.5 插入步骤 / 删除步骤 / 番茄计时 */
+      var ins = closestData(t, "data-step-ins");
+      if (ins) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("stepIns", { key: ins.getAttribute("data-step-ins") });
+        return;
+      }
+      var pomo = closestData(t, "data-step-pomo");
+      if (pomo) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("stepPomo", { ti: pomo.getAttribute("data-ti"), si: pomo.getAttribute("data-si") });
+        return;
+      }
+      var delStep = closestData(t, "data-step-del");
+      if (delStep) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        send("stepDel", { key: delStep.getAttribute("data-step-del") });
+        return;
+      }
+
       /* 5. 点步骤 = 切换完成 */
       var li = closestData(t, "data-si");
       if (li && li.getAttribute("data-ti") != null) {
@@ -1045,6 +1166,7 @@
     function closePctBox(){
       if (pctBox && pctBox.parentNode) pctBox.parentNode.removeChild(pctBox);
       pctBox = null;
+      window.__pctBoxOpen = false;
     }
     function togglePctBox(btn){
       var key = btn.getAttribute("data-step-pct");
@@ -1110,6 +1232,7 @@
       var li = btn.closest("li") || btn.parentNode;
       li.parentNode.insertBefore(box, li.nextSibling);
       pctBox = box;
+      window.__pctBoxOpen = true;      /* 让 render 暂停，别把面板冲掉 */
       try { range.focus(); } catch(e2){}
     }
 
@@ -1121,6 +1244,7 @@
       if (editingEl) cancelEdit();
 
       editingEl = el;
+      window.__editing = true;
       editingOrig = (el.textContent || "").trim();
       el.setAttribute("contenteditable", "true");
       el.classList.add("pvEditing");
@@ -1142,6 +1266,7 @@
         el.setAttribute("contenteditable", "false");
         el.classList.remove("pvEditing");
         editingEl = null;
+        window.__editing = false;
 
         var now = (el.textContent || "").trim();
         if (!ok || now === editingOrig) {
@@ -1164,6 +1289,7 @@
       if (!editingEl) return;
       var el = editingEl;
       editingEl = null;
+      window.__editing = false;
       el.setAttribute("contenteditable", "false");
       el.classList.remove("pvEditing");
       el.textContent = editingOrig;
@@ -1215,7 +1341,7 @@
     }, true);
   }
 
-  var _lastRaw = "";
+  var _lastRaw = "";   /* 上一次渲染过的 payload，用来跳过无变化的轮询 */
   window.__renderCount = 0;
 
   function loadOnce(){
@@ -1241,24 +1367,56 @@
      要关掉重开才更新」。
      这里改成自己每 320ms 读一次 payload 文件，内容变了就重渲染。
      payload 只有几 KB，开销可以忽略。 */
-  var _polling = false;
-  function pollPayload(){
-    if (_polling) return;              /* 上一次还没回来就跳过 */
-    _polling = true;
+  /* ================= 自动刷新 =================
+     预览窗独立运行，侧边栏改完数据后要让它自己发现。
+     这里用 setTimeout 递归轮询（不用 setInterval，避免回调堆积），
+     每 200ms 读一次 payload 文件，读到就渲染。
+     不做"内容没变就跳过"的优化 —— 那个优化一旦某次渲染失败，
+     之后内容就再也不会更新（表现就是"点了没反应，关掉重开才好"）。
+     每 200ms 重写一次 7KB 的 DOM，开销可以忽略。 */
+  var _pollTimer = null;
+  var _pollBusy = false;
+  var _pollFails = 0;
+
+  function pollOnce(){
+    if (_pollBusy) { schedulePoll(); return; }
+    _pollBusy = true;
+    var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+    if (!inv) { _pollBusy = false; schedulePoll(); return; }
+
+    var done = false;
+    function finish(){
+      if (done) return;
+      done = true;
+      _pollBusy = false;
+  schedulePoll();
+    }
+
+    /* 兜底：3 秒还没回来就强制解锁，不让轮询停摆 */
+    setTimeout(finish, 3000);
+
     try {
-      var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
-      if (!inv) { _polling = false; return; }
       inv("preview_payload").then(function(txt){
-        _polling = false;
-        if (!txt) return;
-        if (txt === _lastRaw) return;    /* 没变就不动 */
-        _lastRaw = txt;
-        render(txt);
-        window.__renderCount++;
-      }).catch(function(){ _polling = false; });
-    } catch(e) { _polling = false; }
+        _pollFails = 0;
+        if (txt) {
+          try { render(txt); window.__renderCount++; } catch(e){}
+        }
+        finish();
+      }).catch(function(){
+        _pollFails++;
+        finish();
+      });
+    } catch(e) {
+      finish();
+    }
   }
-  setInterval(pollPayload, 250);
+
+  function schedulePoll(){
+    if (_pollTimer) clearTimeout(_pollTimer);
+    _pollTimer = setTimeout(pollOnce, 200);
+  }
+
+  schedulePoll();
 })();
 </script>
 

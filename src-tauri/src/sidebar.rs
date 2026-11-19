@@ -9,7 +9,7 @@
 //! 不会再被 primary_monitor 强行钉回主屏。
 
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, WebviewUrl,
@@ -914,6 +914,33 @@ static PV_TX: Mutex<Option<std::sync::mpsc::Sender<PvCmd>>> = Mutex::new(None);
 /// 实际状态会不同步 —— get_webview_window 返回 None，但 build 报
 /// "webview with label already exists"，之后再创建永远失败。
 /// 每次换新名字可以彻底绕开；关掉旧窗口也不再有 label 冲突。
+/// 光标是否停在预览窗里（由前端 preview_pointer 回报）
+static PTR_INSIDE: AtomicBool = AtomicBool::new(false);
+/// 上次收到「光标在窗里」心跳的时间（毫秒时间戳，0 = 从未）
+static PTR_AT: AtomicU64 = AtomicU64::new(0);
+
+/// 光标是否**真的**还在预览窗里：标记为 true 且 2 秒内有心跳。
+/// 没有心跳说明预览窗那边没机会回报（鼠标直接拖出去了、
+/// 或者压根没进来过），就当作已离开 —— 否则 Hide 会被永远挡住，
+/// 浮层再也关不掉。
+fn ptr_really_inside() -> bool {
+    if !PTR_INSIDE.load(Ordering::SeqCst) {
+        return false;
+    }
+    let at = PTR_AT.load(Ordering::SeqCst);
+    if at == 0 {
+        return false;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    now.saturating_sub(at) < 2000
+}
+
+/// 预览窗是否真的存在（前端用它校正 curCard）
+static ALIVE: AtomicBool = AtomicBool::new(false);
+
 static PV_SEQ: AtomicU32 = AtomicU32::new(0);
 
 
@@ -953,41 +980,63 @@ pub fn spawn_preview_thread(app: AppHandle) {
                 match cmd {
                     PvCmd::Hide => {
                         /* 关掉而不是隐藏：label 用完就丢，下次换新的。
-                           但如果鼠标正停在预览窗里，就先别关 —— 用户还要操作。 */
-                        if pinned && pointer_inside(rect) {
+                           但如果光标停在预览窗里，就先别关 —— 用户还要操作。
+
+                           ⚠ 判断依据用 **前端回报的 PTR_INSIDE**，
+                           不能用 pointer_inside(rect)：那个靠窗口矩形和
+                           屏幕坐标去猜，在 124%~150% 缩放下经常误判成
+                           "光标不在窗里"，于是在用户操作时把窗口关掉，
+                           后续所有 preview_update 都打空 ——
+                           表现就是「点了没反应」。 */
+                        if ptr_really_inside() {
                             continue;
                         }
                         pinned = false;
                         rect = None;
                         if let Some((w, _)) = cur.take() {
                             let _ = w.destroy();
+                        ALIVE.store(false, Ordering::SeqCst);
+                        PTR_INSIDE.store(false, Ordering::SeqCst);
+                        PTR_AT.store(0, Ordering::SeqCst);
                         }
                     }
                     PvCmd::Reload => {
-                        /* 让页面自己重读 payload。用 eval 在这里是安全的 ——
-                           它在预览线程里执行，不占 IPC 线程。 */
+                        /* 让预览窗重新读内容。
+                           不 navigate（会重载页面、丢滚动和光标），
+                           改为跑一段自愈脚本：
+                             1. 先调 __reload()（重新读 payload 文件并渲染）
+                             2. 顺便把面板状态也同步一次
+                           这段在预览线程里执行，不占 IPC 线程。 */
                         if let Some((w, _)) = cur.as_ref() {
-                            let _ = w.eval("if(window.__reload)window.__reload();");
+                            if w.is_visible().is_ok() {
+                                let _ = w.eval(
+                                    "try{                                        if(window.__reload) window.__reload();                                     }catch(e){}"
+                                );
+                            } else {
+                                cur = None;
+                                ALIVE.store(false, Ordering::SeqCst);
+                        PTR_INSIDE.store(false, Ordering::SeqCst);
+                        PTR_AT.store(0, Ordering::SeqCst);
+                            }
                         }
                     }
                     PvCmd::Poll => {
-                        /* 只做一件事：鼠标离开预览窗后把 pin 解开，
-                           顺便把窗口收掉 */
+                        /* 只维护 pin 状态，**不销毁窗口**。
+                           销毁交给前端的 preview_hide —— 那边的判断基于
+                           DOM 的 mouseover/mouseout，比这里靠屏幕坐标
+                           猜光标位置可靠得多。 */
                         if cur.is_none() { continue; }
                         if pointer_inside(rect) {
                             pinned = true;
-                        } else if pinned {
-                            pinned = false;
-                            rect = None;
-                            if let Some((w, _)) = cur.take() {
-                                let _ = w.destroy();
-                            }
                         }
                     }
                     PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
                         /* 旧窗口先销毁 */
                         if let Some((w, _)) = cur.take() {
                             let _ = w.destroy();
+                        ALIVE.store(false, Ordering::SeqCst);
+                        PTR_INSIDE.store(false, Ordering::SeqCst);
+                        PTR_AT.store(0, Ordering::SeqCst);
                             std::thread::sleep(std::time::Duration::from_millis(40));
                         }
 
@@ -1073,6 +1122,9 @@ pub fn spawn_preview_thread(app: AppHandle) {
                                 rect = Some((px, y, px + pw, y + h));
                                 pinned = false;
                                 cur = Some((w, seq));
+                    ALIVE.store(true, Ordering::SeqCst);
+                    /* 新窗刚出来，光标大概率就在里面（悬停触发的） */
+                    PTR_INSIDE.store(true, Ordering::SeqCst);
                             }
                             Err(e) => eprintln!("[preview] 创建 {} 失败: {}", label, e),
                         }
@@ -1096,10 +1148,14 @@ pub fn preview_action(app: AppHandle, kind: String, data: serde_json::Value) {
 
 /// 前端：轮询鼠标是否还在预览窗里
 #[tauri::command]
-pub fn preview_poll(_app: AppHandle) {
+pub fn preview_poll(_app: AppHandle) -> bool {
     if let Some(t) = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone() {
         let _ = t.send(PvCmd::Poll);
     }
+    /* 顺便告诉前端：预览窗现在到底还在不在。
+       前端用这个来校正 curCard，避免「以为窗口开着、
+       其实早被销毁了，推送全打水漂」。 */
+    ALIVE.load(Ordering::SeqCst)
 }
 
 /// 前端：显示预览
@@ -1132,6 +1188,24 @@ pub fn preview_hide(_app: AppHandle) -> Result<(), String> {
         let _ = t.send(PvCmd::Hide);
     }
     Ok(())
+}
+
+/// 前端：预览窗里的光标进出时通知侧边栏。
+/// 侧边栏据此决定"能不能关窗口"—— 光标在里面时绝不能关。
+#[tauri::command]
+pub fn preview_pointer(app: AppHandle, inside: bool) {
+    use tauri::Emitter;
+    PTR_INSIDE.store(inside, Ordering::SeqCst);
+    if inside {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        PTR_AT.store(now, Ordering::SeqCst);
+    } else {
+        PTR_AT.store(0, Ordering::SeqCst);
+    }
+    let _ = app.emit_to(LABEL, "preview-pointer", serde_json::json!({ "inside": inside }));
 }
 
 /// 只更新预览内容，不重建窗口。
