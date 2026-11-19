@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.1.3 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.1.4 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -152,7 +152,17 @@ html, body { margin: 0; padding: 0; }
     .lg-summary { padding:10px 12px; border:1px solid var(--dsw-alias-border-l2,#3a4150); border-radius:10px; background:var(--dsw-alias-fill-l1,rgba(255,255,255,.03)); font-size:12px; color:var(--dsw-alias-label-primary,#e6e8eb); line-height:1.7; }
     .lg-routeGen { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     /* 设置 */
-    .lg-settings { width:100%; max-width:600px; display:flex; flex-direction:column; gap:12px; flex:1 1 0; min-height:0; overflow:auto; padding-right:6px; }
+    /* 设置页：两栏网格，铺满可用宽度。
+       以前是 max-width:600px 的单列，右半边整块空着。
+       现在按用途分成两组（连接与数据 / 应用与扩展），各占一栏；
+       窄屏（<1080px）自动退回单列。 */
+    .lg-settings { width:100%; display:grid; grid-template-columns:1fr 1fr;
+                   gap:14px; align-content:start; align-items:start;
+                   flex:1 1 0; min-height:0; overflow:auto; padding-right:6px; }
+    .lg-settings .lg-col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+    @media (max-width: 1080px) {
+      .lg-settings { grid-template-columns:1fr; }
+    }
     .lg-field { display:flex; flex-direction:column; gap:5px; }
     .lg-field label { font-size:12px; color:var(--dsw-alias-label-secondary,#9aa4b2); }
     .lg-secret { letter-spacing:1px; }
@@ -1383,129 +1393,136 @@ html, body { margin: 0; padding: 0; }
     </div>
 
     
-    <div class="lg-pane" id="pane-settings">
+<div class="lg-pane" id="pane-settings">
       <div class="lg-settings">
-        <div class="dshell-card">
-          <h2 class="dshell-sub" style="margin:0 0 10px">思源笔记连接</h2>
-          <div class="lg-field">
-            <label>API 地址</label>
-            <input id="apiBase" class="dshell-input" placeholder="http://127.0.0.1:6806" />
-          </div>
-          <div style="height:8px"></div>
-          <div class="lg-field">
-            <label>API 令牌（思源设置 → 关于 → API 令牌）</label>
-            <input id="apiToken" class="dshell-input lg-secret" type="password" placeholder="粘贴你的令牌" />
-          </div>
-          <div style="height:12px"></div>
-          <div class="lg-actions">
-            <button id="btnTest" class="dshell-btn dshell-btnGhost">测试连接</button>
-            <button id="btnLoad" class="dshell-btn">保存并加载</button>
-            <span id="testResult" class="lg-hint"></span>
-          </div>
-          <div class="dshell-divider"></div>
-          <p class="lg-note">令牌只保存在本机浏览器 localStorage，不上传、不写入文件。连接思源后，窗口自动抽取文档/标签/标题构建图谱，并用 AI 生成今日待办。</p>
-        </div>
 
-        <div class="dshell-card">
-          <h2 class="dshell-sub" style="margin:0 0 10px">AI 待办引擎</h2>
-          <p class="lg-note" style="margin:0 0 10px">「AI 生成今日待办」会读取周报总结里正在推进的事，拆成今天一天能做完的待办，用大白话写。留空则不可用。</p>
-          <div class="lg-field">
-            <label>接口地址（OpenAI 兼容 /chat/completions）</label>
-            <input id="aiBase" class="dshell-input" placeholder="https://api.example.com/v1/chat/completions" />
-          </div>
-          <div style="height:8px"></div>
-          <div class="lg-field">
-            <label>模型</label>
-            <input id="aiModel" class="dshell-input" placeholder="your-model-name" />
-          </div>
-          <div style="height:8px"></div>
-          <div class="lg-field">
-            <label>API Key（可选，仅存 localStorage）</label>
-            <input id="aiKey" class="dshell-input lg-secret" type="password" placeholder="你的 AI API Key" />
-          </div>
-        </div>
+        <!-- ===== 左栏：连接与数据 ===== -->
+        <div class="lg-col">
 
-        <div class="dshell-card">
-          <h2 class="dshell-sub" style="margin:0 0 10px">周报数据源</h2>
-          <p class="lg-note" style="margin:0 0 10px">留空则沿用上面的本机思源。要读服务器上的笔记，填公网地址与那台思源的 API 令牌；「笔记 AI 总结」和「番茄钟周报」都会改走这里。</p>
-          <div class="lg-field">
-            <label>思源地址（服务器）</label>
-            <input id="wsBase" class="dshell-input" placeholder="http://公网IP:6806" />
-          </div>
-          <div style="height:8px"></div>
-          <div class="lg-field">
-            <label>API 令牌（服务器那台思源）</label>
-            <input id="wsToken" class="dshell-input lg-secret" type="password" placeholder="留空则沿用本机令牌" />
-          </div>
-          <div style="height:12px"></div>
-          <div class="lg-actions">
-            <button id="wsSave" class="dshell-btn">保存并测试</button>
-            <span id="wsResult" class="lg-hint"></span>
-          </div>
-        </div>
-
-        <div class="dshell-card">
-          <h2 class="dshell-sub" style="margin:0 0 10px">侧边栏</h2>
-          <p class="lg-note" style="margin:0 0 10px">
-            全局快捷键用于随时呼出/收起侧边栏。点输入框后直接按下新的组合键即可。
-          </p>
-          <div class="lg-field">
-            <label>呼出快捷键</label>
-            <input id="hkInput" class="dshell-input" readonly
-                   placeholder="点这里后按下组合键" style="cursor:pointer" />
-          </div>
-          <div style="height:12px"></div>
-          <div class="lg-field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input id="appbarChk" type="checkbox" style="margin:0" />
-              <span>占住屏幕边缘（其他窗口最大化时自动避开侧边栏）</span>
-            </label>
-          </div>
-          <p class="lg-note" style="margin:6px 0 0">
-            开启后侧边栏会像任务栏一样占一条屏幕边缘。只对「最大化」和「贴边对齐」
-            的窗口生效，普通窗口不会自动移动。
-          </p>
-          <div style="height:12px"></div>
-          <div class="lg-field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input id="rightClickChk" type="checkbox" style="margin:0" />
-              <span>启用右键（主界面和侧边栏）</span>
-            </label>
-          </div>
-          <p class="lg-note" style="margin:6px 0 0">
-            默认关闭。开启后，在侧边栏空白处右键会打开本页；主界面右键使用浏览器默认菜单。
-            输入框内的右键始终可用（粘贴、全选需要）。
-          </p>
-          <div style="height:12px"></div>
-          <div class="lg-actions">
-            <button id="hkSave" class="dshell-btn">保存</button>
-            <span id="hkResult" class="lg-hint"></span>
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">思源笔记连接</h2>
+            <p class="lg-note" style="margin:0 0 10px">本机的思源内核。工作台从它读文档、写待办。</p>
+            <div class="lg-field">
+              <label>API 地址</label>
+              <input id="apiBase" class="dshell-input" placeholder="http://127.0.0.1:6806" />
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>API 令牌（思源设置 → 关于 → API 令牌）</label>
+              <input id="apiToken" class="dshell-input lg-secret" type="password" placeholder="粘贴你的令牌" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="lg-actions">
+              <button id="btnTest" class="dshell-btn dshell-btnGhost">测试连接</button>
+              <button id="btnLoad" class="dshell-btn">保存并加载</button>
+              <span id="testResult" class="lg-hint"></span>
+            </div>
+            <div class="dshell-divider"></div>
+            <p class="lg-note">令牌只保存在本机 localStorage，不上传、不写入文件。连接思源后，窗口自动抽取文档 / 标签 / 标题构建图谱，并用 AI 生成今日待办。</p>
           </div>
 
-          <div class="dshell-divider"></div>
-          <h3 style="margin:0 0 8px;font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary,#e6e8eb)">
-            全部快捷键
-          </h3>
-          <div id="hkList" style="display:flex;flex-direction:column;gap:6px;font-size:12px"></div>
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">AI 待办引擎</h2>
+            <p class="lg-note" style="margin:0 0 10px">「AI 生成今日待办」会读取周报里正在推进的事，拆成今天一天能做完的待办。留空则不可用。</p>
+            <div class="lg-field">
+              <label>接口地址（OpenAI 兼容 /chat/completions）</label>
+              <input id="aiBase" class="dshell-input" placeholder="https://api.example.com/v1/chat/completions" />
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>模型</label>
+              <input id="aiModel" class="dshell-input" placeholder="your-model-name" />
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>API Key（可选，仅存 localStorage）</label>
+              <input id="aiKey" class="dshell-input lg-secret" type="password" placeholder="你的 AI API Key" />
+            </div>
+          </div>
+
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">周报数据源</h2>
+            <p class="lg-note" style="margin:0 0 10px">留空则沿用上面的本机思源。要读服务器上的笔记，填公网地址与那台思源的令牌；「笔记 AI 总结」和「番茄钟周报」都会改走这里。</p>
+            <div class="lg-field">
+              <label>思源地址（服务器）</label>
+              <input id="wsBase" class="dshell-input" placeholder="http://公网IP:6806" />
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>API 令牌（服务器那台思源）</label>
+              <input id="wsToken" class="dshell-input lg-secret" type="password" placeholder="留空则沿用本机令牌" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="lg-actions">
+              <button id="wsSave" class="dshell-btn">保存并测试</button>
+              <span id="wsResult" class="lg-hint"></span>
+            </div>
+          </div>
+
         </div>
 
-        <div class="dshell-card">
-          <h2 class="dshell-sub" style="margin:0 0 10px">拓展服务</h2>
-          <p class="lg-note" style="margin:0 0 10px">
-            发票 PDF 解析（含 OCR）跑在独立服务器上，不随本软件分发。
-            填好地址后，「发票管家 → 导入发票」就能把上传的 PDF 解析成表格。
-            留空表示用本机 127.0.0.1:3923（开发期用）。
-          </p>
-          <div class="lg-field">
-            <label>发票解析服务地址</label>
-            <input id="svcInvoice" class="dshell-input" placeholder="http://服务器IP:3923" />
+        <!-- ===== 右栏：应用与扩展 ===== -->
+        <div class="lg-col">
+
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">侧边栏</h2>
+            <p class="lg-note" style="margin:0 0 10px">全局快捷键用于随时呼出 / 收起侧边栏。点输入框后直接按下新的组合键即可。</p>
+            <div class="lg-field">
+              <label>呼出快捷键</label>
+              <input id="hkInput" class="dshell-input" readonly
+                     placeholder="点这里后按下组合键" style="cursor:pointer" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="lg-field">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input id="appbarChk" type="checkbox" style="margin:0" />
+                <span>占住屏幕边缘（其他窗口最大化时自动避开侧边栏）</span>
+              </label>
+            </div>
+            <p class="lg-note" style="margin:6px 0 0">
+              开启后侧边栏会像任务栏一样占一条屏幕边缘。只对「最大化」和「贴边对齐」的窗口生效，普通窗口不会自动移动。
+            </p>
+            <div style="height:12px"></div>
+            <div class="lg-field">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input id="rightClickChk" type="checkbox" style="margin:0" />
+                <span>启用右键（主界面和侧边栏）</span>
+              </label>
+            </div>
+            <p class="lg-note" style="margin:6px 0 0">
+              默认关闭。开启后，在侧边栏空白处右键会打开本页；主界面右键使用浏览器默认菜单。输入框内的右键始终可用。
+            </p>
+            <div style="height:12px"></div>
+            <div class="lg-actions">
+              <button id="hkSave" class="dshell-btn">保存</button>
+              <span id="hkResult" class="lg-hint"></span>
+            </div>
           </div>
-          <div style="height:12px"></div>
-          <div class="lg-actions">
-            <button id="svcSave" class="dshell-btn">保存并测试</button>
-            <span id="svcResult" class="lg-hint"></span>
+
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">拓展服务</h2>
+            <p class="lg-note" style="margin:0 0 10px">
+              发票 PDF 解析（含 OCR）跑在独立服务器上，不随本软件分发。填好地址后，「发票管家 → 导入发票」就能把上传的 PDF 解析成表格。留空表示用本机 127.0.0.1:3923。
+            </p>
+            <div class="lg-field">
+              <label>发票解析服务地址</label>
+              <input id="svcInvoice" class="dshell-input" placeholder="http://服务器IP:3923" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="lg-actions">
+              <button id="svcSave" class="dshell-btn">保存并测试</button>
+              <span id="svcResult" class="lg-hint"></span>
+            </div>
           </div>
+
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">全部快捷键</h2>
+            <p class="lg-note" style="margin:0 0 10px">只读，方便随时查。呼出快捷键可以在上面改。</p>
+            <div id="hkList" style="display:flex;flex-direction:column;gap:6px;font-size:12px"></div>
+          </div>
+
         </div>
+
       </div>
     </div>
   </div>
@@ -1516,7 +1533,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.3</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.4</span>
   </div>
 </div>
 
