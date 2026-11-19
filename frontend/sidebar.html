@@ -320,27 +320,51 @@
   .todoBrief{ font-size:12px; }
   .todoBrief .score{ margin-bottom:6px; }
   .todoBrief .briefList{ margin-top:8px; display:flex; flex-direction:column; gap:5px; }
+  /* 精简卡的一行待办：两行排布
+       第 1 行  优先级色点 + 待办名
+       第 2 行  当前在做的步骤（换行，缩进对齐） */
   .briefRow{
-    display:flex; align-items:baseline; gap:6px;
-    padding:3px 0; line-height:1.45;
-    border-bottom:1px dashed rgba(226,214,186,.55);
+    display:flex; flex-direction:column; gap:2px;
+    padding:5px 0; line-height:1.45;
   }
-  .briefRow:last-child{ border-bottom:none; }
+  .briefLine1{
+    display:flex; align-items:center; gap:7px; min-width:0;
+  }
   .briefDot{
-    flex:none; width:5px; height:5px; border-radius:50%;
-    background:#c9b98f; align-self:center;
+    flex:none; width:7px; height:7px; border-radius:50%;
+    background:#c9b98f;
   }
-  .briefRow.done .briefDot{ background:#7bb37b; }
-  .briefRow.done .briefName{ color:#a9a397; text-decoration:line-through; }
+  /* 优先级配色：红 > 橙 > 琥珀 > 绿 */
+  .briefRow.p1 .briefDot{ background:#e05252; box-shadow:0 0 0 2px rgba(224,82,82,.16); }
+  .briefRow.p2 .briefDot{ background:#e8863a; box-shadow:0 0 0 2px rgba(232,134,58,.16); }
+  .briefRow.p3 .briefDot{ background:#d9a015; box-shadow:0 0 0 2px rgba(217,160,21,.16); }
+  .briefRow.p4 .briefDot{ background:#4caf6e; box-shadow:0 0 0 2px rgba(76,175,110,.16); }
+
+  .briefRow.p1 .briefName{ color:#b83a3a; }
+  .briefRow.p2 .briefName{ color:#a95f21; }
+  .briefRow.p3 .briefName{ color:#8a6a10; }
+  .briefRow.p4 .briefName{ color:#2f7a4f; }
+
   .briefName{
-    flex:none; max-width:52%; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:var(--ink); font-weight:600;
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-weight:600;
   }
+  /* 第二行：当前步骤，缩进到和待办名对齐 */
   .briefCur{
-    flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:var(--sub); font-size:11.5px;
+    padding-left:14px;
+    color:var(--sub); font-size:11.5px; line-height:1.5;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .briefCur::before{ content:"· "; color:#c9b98f; }
+  .briefCur::before{ content:"▸ "; color:#c9b98f; }
+
+  .briefCur.curDone{ color:#7bb37b; }
+  .briefMore{
+    margin-top:4px; font-size:10.5px; color:#b9b2a3; padding-left:14px;
+  }
+  .briefEmpty{
+    font-size:11.5px; color:#7bb37b; padding:4px 0;
+  }
 
   /* ---- 文档检索：折叠看摘要，展开看完整 ----
      折叠态：总文档、总字数、今天在编辑的几篇
@@ -348,27 +372,55 @@
   .scroll > .card:not(.isExpanded) .docDetail{ display:none !important; }
 
   .docToday{ margin-top:8px; }
-  .docTodayHead{
-    font-size:11px; color:var(--sub); margin-bottom:5px;
+  .docTopHead{
+    font-size:10.5px; color:#b9b2a3; margin-bottom:3px;
   }
-  .docTodayHead b{ color:var(--ink); font-weight:700; }
-  .docTodayList{ display:flex; flex-direction:column; gap:3px; }
-  .docRow{
-    display:flex; align-items:baseline; gap:6px;
-    font-size:11.5px; padding:2px 0;
+  .docTopRow{
+    display:flex; align-items:baseline; gap:8px;
+    font-size:12px; padding:4px 0;
+    border-top:1px dashed rgba(226,214,186,.7);
   }
-  .docNm{
-    flex:1 1 0; min-width:0; overflow:hidden; text-overflow:ellipsis;
-    white-space:nowrap; color:var(--ink);
+  .docTopNm{
+    flex:1 1 0; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--ink); font-weight:600;
   }
-  .docWc{ flex:none; color:var(--sub); font-size:10.5px; }
+  .docTopWc{
+    flex:none; color:#1B365D; font-weight:700; font-size:11.5px;
+  }
   .docEmpty{ font-size:11.5px; color:#b9b2a3; font-style:italic; }
+
+  .docDetailHead{
+    font-size:11px; color:var(--sub); margin:2px 0 6px;
+    padding-bottom:5px; border-bottom:1px dashed rgba(226,214,186,.7);
+  }
 
   /* 数据库：折叠看总量+标签，展开看完整 */
   .scroll > .card:not(.isExpanded) .dbDetail{ display:none !important; }
   .scroll > .card.isCollapsed .dbBrief{ display:none !important; }
   .dbTagChips{ margin-top:8px; }
-  .dbTagChips .chip{ font-size:10.5px; }
+  /* 数据库标签：彩色。
+     --tc 是每个笔记本自己的颜色（见 NB_COLORS），
+     色点用实色、边框和底用同色低透明度，文字略深。 */
+  .dbTagChips .chip.dbTag{
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:10.5px; padding:2px 8px 2px 6px;
+    border:1px solid var(--tc, #c9b98f);
+    background:color-mix(in srgb, var(--tc, #c9b98f) 11%, transparent);
+    color:var(--tc, #6b6558);
+    border-radius:20px;
+  }
+  .dbTagChips .chip.dbTag b.dbTagDot{
+    flex:none; width:6px; height:6px; border-radius:50%;
+    background:var(--tc, #c9b98f);
+  }
+  .dbTagChips .chip.dbTag i{
+    color:var(--tc, #8a8478); opacity:.78; font-style:normal;
+  }
+
+  /* 今日执行力：精简卡只显示今天的，去掉与上周的增减比较。
+     这些条目的 li 上带 .weekCmp，展开态和浮层里仍然看得到。 */
+  .scroll > .card:not(.isExpanded) .wkTodayTips li.weekCmp{ display:none !important; }
 
   /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
   .scroll > .card > h3{
@@ -1640,52 +1692,109 @@
       var brief = document.createElement("div");
       brief.className = "todoBrief";
 
-      /* 分数栏（从 detail 里搬出来单独显示在最上面） */
+      /* 分数栏：**复制**一份给精简卡，原件留在 detail 里。
+         ⚠ 以前用 appendChild 搬 —— 搬走后完整卡就没有评分了。 */
       var scoreEl = detail.querySelector(".score");
       var barEl = detail.querySelector(".bar");
       var metaEl = detail.querySelector(".meta");
-      if (scoreEl) brief.appendChild(scoreEl);
-      if (barEl) brief.appendChild(barEl);
-      if (metaEl) brief.appendChild(metaEl);
+      [scoreEl, barEl, metaEl].forEach(function(el){
+        if (el) brief.appendChild(el.cloneNode(true));
+      });
 
-      /* 每条待办只列名字 + 它当前未完成的第一个步骤 */
+      /* 精简卡：只列**未完成**的待办。
+         每条 = 第一行「彩色优先级点 + 待办名」，
+                第二行「当前在做的步骤」（换行显示）。
+         只显示 1 条 —— 多的留给展开态和悬停浮层。 */
       var tasks = detail.querySelectorAll(".task");
       var list = document.createElement("div");
       list.className = "briefList";
+
+      var pending = [];
       Array.prototype.forEach.call(tasks, function(tk){
+        if (tk.classList.contains("tdone")) return;   /* 完成的不列 */
         var nm = tk.querySelector(".nm");
         var name = nm ? (nm.textContent || "").trim() : "";
         if (!name) return;
+        pending.push({ el: tk, name: name });
+      });
 
+      /* 优先级颜色：从任务的象限类名判断
+           q-iu 重要·紧急   红
+           q-in 重要·不紧急  橙
+           q-un 不重要·不紧急 绿 */
+      function prioOf(tk){
+        if (tk.classList.contains("q-iu")) return { cls: "p1", label: "重要·紧急" };
+        if (tk.classList.contains("q-in")) return { cls: "p2", label: "重要·不紧急" };
+        if (tk.classList.contains("q-uu")) return { cls: "p3", label: "紧急·不重要" };
+        if (tk.classList.contains("q-un")) return { cls: "p4", label: "不重要·不紧急" };
+        return { cls: "p2", label: "" };
+      }
+
+      /* 先按优先级排序，再只取第一条 */
+      var ORDER = { p1: 0, p2: 1, p3: 2, p4: 3 };
+      pending.forEach(function(p){ p.prio = prioOf(p.el); });
+      pending.sort(function(a2, b2){ return ORDER[a2.prio.cls] - ORDER[b2.prio.cls]; });
+
+      var show = pending.slice(0, 1);
+      if (!show.length) {
+        var empty = document.createElement("div");
+        empty.className = "briefEmpty";
+        empty.textContent = "待办都完成了";
+        list.appendChild(empty);
+      }
+
+      show.forEach(function(p){
+        var tk = p.el;
         var row = document.createElement("div");
-        row.className = "briefRow" + (tk.classList.contains("tdone") ? " done" : "");
+        row.className = "briefRow " + p.prio.cls;
+
+        /* 第一行：优先级点 + 名字 */
+        var line1 = document.createElement("div");
+        line1.className = "briefLine1";
 
         var dot = document.createElement("span");
         dot.className = "briefDot";
-        row.appendChild(dot);
+        dot.title = p.prio.label;
+        line1.appendChild(dot);
 
         var nmEl = document.createElement("span");
         nmEl.className = "briefName";
-        nmEl.textContent = name;
-        row.appendChild(nmEl);
+        nmEl.textContent = p.name;
+        line1.appendChild(nmEl);
 
-        /* 当前在做的步骤 = 第一个未完成的 */
+        row.appendChild(line1);
+
+        /* 第二行：当前在做的步骤 */
         var cur = null;
         var subs = tk.querySelectorAll(".subs > li");
         Array.prototype.forEach.call(subs, function(li){
           if (cur) return;
           if (!li.classList.contains("done")) cur = li;
         });
+        var curEl = document.createElement("div");
+        curEl.className = "briefCur";
         if (cur) {
           var txt = cur.querySelector(".subTxt");
-          var curEl = document.createElement("span");
-          curEl.className = "briefCur";
           curEl.textContent = txt ? (txt.textContent || "").trim() : "";
-          row.appendChild(curEl);
+        } else {
+          /* 步骤全做完了（但任务没标完成）—— 给个明确提示，
+             不要留一个空箭头让人以为坏了 */
+          curEl.textContent = "步骤已全部完成，可以勾掉这条了";
+          curEl.classList.add("curDone");
         }
+        row.appendChild(curEl);
 
         list.appendChild(row);
       });
+
+      /* 剩下还有几条未完成，给个提示 */
+      if (pending.length > 1) {
+        var more = document.createElement("div");
+        more.className = "briefMore";
+        more.textContent = "还有 " + (pending.length - 1) + " 条未完成";
+        list.appendChild(more);
+      }
+
       brief.appendChild(list);
 
       body.appendChild(brief);
@@ -2116,9 +2225,10 @@
       pActive.forEach(function(d){ pAll += (d.ptsAll || 0); pGot += (d.ptsGot || 0); });
       var pRate = pAll ? Math.round(pGot / pAll * 100) : 0;
       var tl = trendLabel(weekRate - pRate);
-      tips.push({ k: tl.word, d: tl.tip, tone: tl.tone, level: tl.level });
+      /* weekCmp: 和上周的增减比较，精简卡里不显示 */
+      tips.push({ k: tl.word, d: tl.tip, tone: tl.tone, level: tl.level, weekCmp: true });
     } else if (pActive.length) {
-      tips.push({ k: '上周只有 ' + pActive.length + ' 天有记录', d: '攒够两周数据后才看得出趋势', tone: 'none' });
+      tips.push({ k: '上周只有 ' + pActive.length + ' 天有记录', d: '攒够两周数据后才看得出趋势', tone: 'none', weekCmp: true });
     }
 
     /* —— ③ 本周平均效率：七档 —— */
@@ -2170,7 +2280,7 @@
        结论里的数字再单独放大；颜色由 tone 决定：
          bad=红（慢/降/低） good=绿（快/升/高） flat=不变色 none=中性灰。 */
     h += '<ul class="wkTodayTips">' + tips.map(function(x){
-      return '<li class="' + toneCls(x.tone, x.level) + '">'
+      return '<li class="' + toneCls(x.tone, x.level) + (x.weekCmp ? ' weekCmp' : '') + '">'
         +   '<span class="wkTipK">' + hlNum(x.k) + '</span>'
         +   '<span class="wkTipD">' + esc(x.d) + '</span>'
         + '</li>';
@@ -3022,7 +3132,6 @@
   /* ---------- 知识图谱：结构概览 ---------- */
   function renderGraph(){
     var body = $("graphBody"), at = $("graphAt");
-    /* 今天 0 点，用来筛「今天在编辑的」 */
     var d0 = new Date();
     d0.setHours(0,0,0,0);
     var todayStamp = stamp(d0);
@@ -3030,60 +3139,79 @@
     Promise.all([
       /* 总文档数 */
       sql("SELECT count(*) AS n FROM blocks WHERE type='d' AND box!=''"),
-      /* 总字数：把每个文档的 content 长度加起来
-         （用 length(content) 而不是 getBlocksWordCount ——
-          后者返回的是全局聚合值，不能按文档拆） */
-      sql("SELECT sum(length(content)) AS wc FROM blocks WHERE type='d' AND box!=''"),
-      /* 今天编辑过的文档（按最后修改时间倒序） */
-      sql("SELECT content, updated, box, length(content) AS wc FROM blocks WHERE type='d' AND box!='' AND updated >= '" + todayStamp + "' ORDER BY updated DESC LIMIT 12")
+      /* 今天编辑过的文档 */
+      sql("SELECT id, content, updated, box FROM blocks WHERE type='d' AND box!='' AND updated >= '" + todayStamp + "' ORDER BY updated DESC LIMIT 20")
     ]).then(function(r){
       var docs = (r[0] && r[0][0] && r[0][0].n) || 0;
-      var totalWc = (r[1] && r[1][0] && r[1][0].wc) || 0;
-      var edited = r[2] || [];
+      /* ⚠ 上面 Promise.all 只有 2 项：r[0] 是总数、r[1] 是文档列表。
+         之前写成 r[2]，取到 undefined，「今日编辑」永远是 0 篇。 */
+      var edited = r[1] || [];
 
-      /* 今日编辑的总字数 */
-      /* 今日编辑文档的总字数（wc 是 SQL 里 length(content) 的结果） */
-      var todayWc = 0;
-      edited.forEach(function(d){ todayWc += Number(d.wc) || 0; });
+      /* ⚠ length(content) 统计的是**标题字数**（content 列存的就是文档标题），
+         不是正文。正文要单独查 —— 用同一个 SQL 查不到。
+         这里对今天的文档逐个查它子块的字数之和。 */
+      var sumP = edited.map(function(d){
+        return sql("SELECT sum(length(content)) AS wc FROM blocks WHERE root_id='" + d.id + "' AND type IN ('p','h','l','i','t','c')")
+          .then(function(x){ return (x && x[0] && x[0].wc) || 0; })
+          .catch(function(){ return 0; });
+      });
 
-      var h = '<div class="grid2">'
-        + '<div><b>' + fmtNum(docs) + '</b><span>总文档</span></div>'
-        + '<div><b>' + fmtWc(totalWc) + '</b><span>总字数</span></div>'
-        + '</div>';
+      /* 全库总字数：按 root_id 聚合所有文档正文块。
+         一次查完再按文档分组，比逐个查快得多。 */
+      var totalP = sql("SELECT root_id, sum(length(content)) AS wc FROM blocks WHERE type IN ('p','h','l','i','t','c') AND box!='' GROUP BY root_id")
+        .then(function(rows){
+          var t = 0;
+          (rows || []).forEach(function(x){ t += Number(x.wc) || 0; });
+          return t;
+        })
+        .catch(function(){ return 0; });
 
-      h += '<div class="docToday">'
-        + '<div class="docTodayHead">今天在编辑 <b>' + edited.length + '</b> 篇'
-        + (todayWc ? ' · ' + fmtWc(todayWc) + ' 字' : '') + '</div>';
-      if (edited.length) {
-        h += '<div class="docTodayList">' + edited.slice(0, 6).map(function(d){
-          var name = String(d.content || "").replace(/<[^>]+>/g, "").trim() || "（无标题）";
-          return '<div class="docRow" title="' + esc(name) + '">'
-            + '<span class="docNm">' + esc(name.slice(0, 22)) + '</span>'
-            + '<span class="docWc">' + fmtWc(d.wc) + '</span>'
-            + '</div>';
-        }).join("") + '</div>';
-      } else {
-        h += '<div class="docEmpty">今天还没有编辑文档</div>';
-      }
-      h += '</div>';
+      return Promise.all([Promise.all(sumP), totalP]).then(function(rs){
+        var wcs = rs[0], totalWc = rs[1];
 
-      /* 完整版（标签、最近文档等）留给浮层 */
-      var detail = '<div class="docDetail">';
-      detail += '<div class="grid2">'
-        + '<div><b>' + fmtNum(docs) + '</b><span>文档</span></div>'
-        + '<div><b>' + fmtWc(totalWc) + '</b><span>字数</span></div>'
-        + '</div>';
-      if (edited.length) {
-        detail += '<div class="recent">' + edited.map(function(d){
-          var name = String(d.content || "").replace(/<[^>]+>/g, "").trim() || "（无标题）";
-          return '<div class="rline" title="' + esc(name) + '">· ' + esc(name) + ' <i>' + fmtWc(d.wc) + '</i></div>';
-        }).join("") + '</div>';
-      }
-      detail += '</div>';
+        /* 把正文长度挂到每篇文档上 */
+        edited.forEach(function(d, i){ d.wc = wcs[i] || 0; });
 
-      body.className = "";
-      body.innerHTML = h + detail;
-      if (at) at.textContent = "实时";
+        /* 按字数从多到少，只留最大的那篇 */
+        var sorted = edited.slice().sort(function(a2, b2){ return (b2.wc || 0) - (a2.wc || 0); });
+        var top = sorted[0];
+        var todayWc = 0;
+        edited.forEach(function(d){ todayWc += d.wc || 0; });
+
+        var h = '<div class="grid2">'
+          + '<div><b>' + fmtNum(docs) + '</b><span>总文档</span></div>'
+          + '<div><b>' + fmtWc(totalWc) + '</b><span>总字数</span></div>'
+          + '</div>';
+
+        h += '<div class="docToday">';
+        if (top) {
+          var name = String(top.content || "").replace(/<[^>]+>/g, "").trim() || "（无标题）";
+          h += '<div class="docTop">'
+            + '<div class="docTopHead">今天写得最多</div>'
+            + '<div class="docTopRow">'
+            + '<span class="docTopNm" title="' + esc(name) + '">' + esc(name) + '</span>'
+            + '<span class="docTopWc">' + fmtWc(top.wc) + ' 字</span>'
+            + '</div></div>';
+        } else {
+          h += '<div class="docEmpty">今天还没有编辑文档</div>';
+        }
+        h += '</div>';
+
+        /* 完整版（不做重复） */
+        var detail = '<div class="docDetail">';
+        detail += '<div class="docDetailHead">今天编辑 ' + edited.length + ' 篇 · 共 ' + fmtWc(todayWc) + ' 字</div>';
+        if (sorted.length) {
+          detail += '<div class="recent">' + sorted.map(function(d){
+            var n = String(d.content || "").replace(/<[^>]+>/g, "").trim() || "（无标题）";
+            return '<div class="rline" title="' + esc(n) + '">· ' + esc(n) + ' <i>' + fmtWc(d.wc) + ' 字</i></div>';
+          }).join("") + '</div>';
+        }
+        detail += '</div>';
+
+        body.className = "";
+        body.innerHTML = h + detail;
+        if (at) at.textContent = "实时";
+      });
     }).catch(function(e){ fail(body, at, e); });
   }
 
@@ -3271,8 +3399,12 @@
       });
       var names = Object.keys(byNb);
       if (names.length) {
-        brief.innerHTML += '<div class="chips dbTagChips">' + names.map(function(k){
-          return '<span class="chip">' + esc(k) + '<i>' + byNb[k].n + ' 库 · ' + byNb[k].rows + ' 行</i></span>';
+        /* 每个笔记本一个颜色：按名字稳定取色，重启后不变 */
+        brief.innerHTML += '<div class="chips dbTagChips">' + names.map(function(k, idx){
+          var col = NB_COLORS[idx % NB_COLORS.length];
+          return '<span class="chip dbTag" style="--tc:' + col + '" title="' + esc(k) + '">'
+            + '<b class="dbTagDot"></b>' + esc(k)
+            + '<i>' + byNb[k].n + ' 库 · ' + byNb[k].rows + ' 行</i></span>';
         }).join("") + '</div>';
       }
 
