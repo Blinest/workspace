@@ -58,6 +58,8 @@ fn main() {
                 });
             }
             sidebar::spawn_hotkey_thread(handle.clone());
+            /* 任务栏显示/隐藏会改变工作区高度，侧边栏要跟着长高/变矮 */
+            sidebar::spawn_workarea_watcher(handle.clone());
             // 托管系统拖放（WebView2 会拦截 HTML 拖放事件）
             dragdrop::attach(&handle);
             // 后台拉起 3921 / 3923 / 3918；已在监听则跳过，失败只记日志不影响主窗口

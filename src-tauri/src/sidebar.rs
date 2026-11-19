@@ -61,12 +61,37 @@ extern "system" {
     fn GetWindowLongW(hwnd: *mut c_void, index: i32) -> i32;
     fn SetWindowLongW(hwnd: *mut c_void, index: i32, value: i32) -> i32;
     fn PostThreadMessageW(thread_id: u32, msg: u32, w_param: usize, l_param: isize) -> i32;
+    /* 工作区：屏幕矩形减去任务栏等系统占用 */
+    fn SystemParametersInfoW(action: u32, param: u32, pv: *mut RECT, win_ini: u32) -> i32;
+    fn MonitorFromWindow(hwnd: *mut c_void, flags: u32) -> *mut c_void;
+    fn GetMonitorInfoW(hmon: *mut c_void, lpmi: *mut MonitorInfo) -> i32;
 }
 
 #[link(name = "kernel32")]
 extern "system" {
     fn GetCurrentThreadId() -> u32;
 }
+
+#[repr(C)]
+#[derive(Default, Clone, Copy)]
+struct RECT {
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MonitorInfo {
+    cb_size: u32,
+    rc_monitor: RECT,
+    rc_work: RECT,
+    flags: u32,
+}
+
+const SPI_GETWORKAREA: u32 = 0x0030;
+const MONITOR_DEFAULTTONEAREST: u32 = 2;
 
 /* ---------------- 毛玻璃背景 ---------------- */
 
@@ -297,6 +322,38 @@ fn nearest_monitor(win: &WebviewWindow) -> tauri::Result<Option<Monitor>> {
 /// 把窗口吸到最近屏的某一侧（左/右），返回落点。
 /// `content_w` 是前端报上来的真实内容宽度（物理像素），
 /// 传 0 表示未知、退回用 outer_size。
+/// 取窗口所在那块屏的「工作区」矩形（物理像素）：
+/// 屏幕矩形减去任务栏等系统占用。任务栏隐藏时它就等于整屏。
+fn work_area_of(win: &WebviewWindow) -> Option<RECT> {
+    use raw_window_handle::HasWindowHandle;
+    let h = win.window_handle().ok()?;
+    let hwnd = match h.as_raw() {
+        raw_window_handle::RawWindowHandle::Win32(w) => w.hwnd.get() as *mut c_void,
+        _ => return None,
+    };
+    unsafe {
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if hmon.is_null() { return None; }
+        let mut mi = MonitorInfo {
+            cb_size: std::mem::size_of::<MonitorInfo>() as u32,
+            rc_monitor: RECT::default(),
+            rc_work: RECT::default(),
+            flags: 0,
+        };
+        if GetMonitorInfoW(hmon, &mut mi) == 0 { return None; }
+        Some(mi.rc_work)
+    }
+}
+
+/// 兜底：取主屏工作区（拿不到具体窗口时用）
+fn primary_work_area() -> Option<RECT> {
+    unsafe {
+        let mut r = RECT::default();
+        if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut r, 0) == 0 { return None; }
+        Some(r)
+    }
+}
+
 fn snap_to_edge(app: &AppHandle, win: &WebviewWindow, content_w: u32) -> tauri::Result<Option<SavedPos>> {
     let Some(mon) = nearest_monitor(win)? else { return Ok(None) };
     let msize = mon.size();
@@ -312,7 +369,6 @@ fn snap_to_edge(app: &AppHandle, win: &WebviewWindow, content_w: u32) -> tauri::
     let left_border = border / 2;
     let right_border = border - left_border;
     let visible_w = if content_w > 0 { content_w } else { inner_size.width };
-    let h = cur_size.height;
 
     let center_x = cur.x as i64 + visible_w as i64 / 2;
     let mon_left = mpos.x as i64;
@@ -332,12 +388,30 @@ fn snap_to_edge(app: &AppHandle, win: &WebviewWindow, content_w: u32) -> tauri::
     } else {
         (mon_right - visible_w as i64 - right_border as i64) as i32
     };
-    // 垂直方向夹到这块屏内，避免吸到屏幕外面去
-    let mut y = cur.y;
-    let min_y = mpos.y;
-    let max_y = mpos.y + msize.height as i32 - h as i32;
-    if y < min_y { y = min_y; }
-    if y > max_y { y = max_y.max(min_y); }
+
+    /* ⚠ 高度以「工作区」为准，不是整屏高度：
+       工作区 = 屏幕 - 任务栏。任务栏隐藏时就等于整屏，
+       任务栏在下面/上面会自动少掉对应的高度。
+       以前完全不设高度，用的是窗口拖动后剩下的那个值，
+       所以每次拖动都会留下不同的高度。 */
+    let wa = work_area_of(win)
+        .or_else(primary_work_area)
+        .map(|r| (r.top, r.bottom))
+        .unwrap_or((mpos.y, mpos.y + msize.height as i32));
+    let (wa_top, wa_bottom) = wa;
+
+    /* y 从工作区顶部开始，贴到底 */
+    let y = wa_top;
+    let want_h = (wa_bottom - wa_top).max(1) as u32;
+
+    /* 外框比内容高一点（不可见边框），补上去让「看得见的部分」正好铺满 */
+    let dh = cur_size.height.saturating_sub(inner_size.height);
+    let h = want_h.saturating_sub(dh).max(1);
+
+    /* 只在尺寸差得明显时才 set_size，避免反复调用把外框越改越大 */
+    if (cur_size.height as i32 - want_h as i32).abs() > 4 && cur_size.width == inner_size.width + border {
+        let _ = win.set_size(PhysicalSize::new(visible_w, h));
+    }
 
     /* 吸附动画：从当前位置缓动到目标点。
        直接 set_position 会「啪」地跳过去，很生硬。
@@ -426,13 +500,22 @@ fn dock_right(win: &WebviewWindow) -> tauri::Result<()> {
     let mpos = mon.position();          // 物理像素
     let msize = mon.size();             // 物理像素
 
+    /* 高度以工作区为准（屏幕减任务栏），任务栏隐藏时等于整屏 */
+    let wa = work_area_of(win).or_else(primary_work_area);
+    let (wa_top, wa_bottom) = wa
+        .map(|r| (r.top, r.bottom))
+        .unwrap_or((mpos.y, mpos.y + msize.height as i32));
+    let wa_h = (wa_bottom - wa_top).max(1) as u32;
+
     /* 只在尺寸明显不对时才 set_size（已对上就跳过），
        避免反复 set_size 让外框越改越大。 */
     let want_w = ((WIDTH * scale).round() as u32).min(msize.width);
-    let want_h = msize.height;
     let cur = win.outer_size()?;
+    let inner_now = win.inner_size()?;
+    let dh = cur.height.saturating_sub(inner_now.height);
+    let want_h = wa_h.saturating_sub(dh).max(1);
     if (cur.width as i32 - want_w as i32).abs() > 8
-        || (cur.height as i32 - want_h as i32).abs() > 8
+        || (cur.height as i32 - (want_h + dh) as i32).abs() > 8
     {
         win.set_size(PhysicalSize::new(want_w, want_h))?;
     }
@@ -444,7 +527,7 @@ fn dock_right(win: &WebviewWindow) -> tauri::Result<()> {
     let border = outer.width.saturating_sub(inner.width);
     let right_border = border - border / 2;
     let x = mpos.x + msize.width as i32 - inner.width as i32 - right_border as i32;
-    let y = mpos.y;
+    let y = wa_top;
     win.set_position(PhysicalPosition::new(x, y))?;
 
     eprintln!(
@@ -628,6 +711,44 @@ fn hotkey_text(mods: u32, vk: u32) -> String {
     };
     s.push_str(&key);
     s
+}
+
+/// 监视工作区变化（任务栏显示/隐藏、自动隐藏、分辨率变化等）。
+///
+/// 侧边栏的高度是「贴着工作区底部」的。任务栏一隐藏，工作区就变高，
+/// 侧边栏却还停在原来的高度，底部会空出一条。这里轮询工作区矩形，
+/// 变了就重新贴边，让高度自动跟上。
+pub fn spawn_workarea_watcher(app: AppHandle) {
+    let _ = std::thread::Builder::new()
+        .name("sidebar-workarea".into())
+        .spawn(move || {
+            let mut last: Option<(i32, i32, i32, i32)> = None;
+            let mut first = true;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+                let Some(win) = app.get_webview_window(LABEL) else { continue };
+                /* 窗口没显示就不用管 */
+                if !win.is_visible().unwrap_or(false) {
+                    last = None;
+                    first = true;
+                    continue;
+                }
+                let Some(wa) = work_area_of(&win).or_else(primary_work_area) else { continue };
+                let cur = (wa.left, wa.top, wa.right, wa.bottom);
+
+                /* 第一次只记下来，不重排 —— 避免启动时把用户拖好的位置改掉 */
+                if first {
+                    last = Some(cur);
+                    first = false;
+                    continue;
+                }
+                if last == Some(cur) { continue; }
+                last = Some(cur);
+                /* 工作区变了（任务栏显示/隐藏、分辨率变化）：重新贴边，
+                   高度按新工作区重算 */
+                let _ = snap_to_edge(&app, &win, 0);
+            }
+        });
 }
 
 /// 在独立线程注册热键并运行消息循环。
