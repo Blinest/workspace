@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.1.2 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.1.3 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1466,10 +1466,27 @@ html, body { margin: 0; padding: 0; }
             的窗口生效，普通窗口不会自动移动。
           </p>
           <div style="height:12px"></div>
+          <div class="lg-field">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input id="rightClickChk" type="checkbox" style="margin:0" />
+              <span>启用右键（主界面和侧边栏）</span>
+            </label>
+          </div>
+          <p class="lg-note" style="margin:6px 0 0">
+            默认关闭。开启后，在侧边栏空白处右键会打开本页；主界面右键使用浏览器默认菜单。
+            输入框内的右键始终可用（粘贴、全选需要）。
+          </p>
+          <div style="height:12px"></div>
           <div class="lg-actions">
             <button id="hkSave" class="dshell-btn">保存</button>
             <span id="hkResult" class="lg-hint"></span>
           </div>
+
+          <div class="dshell-divider"></div>
+          <h3 style="margin:0 0 8px;font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary,#e6e8eb)">
+            全部快捷键
+          </h3>
+          <div id="hkList" style="display:flex;flex-direction:column;gap:6px;font-size:12px"></div>
         </div>
 
         <div class="dshell-card">
@@ -1499,7 +1516,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.2</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.1.3</span>
   </div>
 </div>
 
@@ -8155,6 +8172,11 @@ async function gradeAI(){
   try {
     appbarChk.checked = localStorage.getItem("dsh.worktable.appbar.v1") === "1";
   } catch(e){}
+  /* 右键开关：默认关闭（没有存过就是关） */
+  var rightClickChk = document.getElementById("rightClickChk");
+  try {
+    rightClickChk.checked = localStorage.getItem("dsh.worktable.rightClick.v1") === "1";
+  } catch(e){}
 
   if (hkSave) hkSave.addEventListener("click", function(ev){
     ev.preventDefault();
@@ -8169,6 +8191,8 @@ async function gradeAI(){
             hkResult.textContent = "✓ 快捷键已改为 " + hkInput.value;
             /* 通知侧边栏：它底部写着当前快捷键，要跟着变 */
             try { localStorage.setItem("dsh.worktable.hotkey.v1", hkInput.value); } catch(e){}
+            /* 快捷键一览里的第一行也要刷新 */
+            try { hkInput.dispatchEvent(new Event("hk-changed")); } catch(e){}
           } else {
             hkResult.textContent = "✕ " + s.replace(/^\w+:/, "");
           }
@@ -8182,6 +8206,14 @@ async function gradeAI(){
       hkResult.textContent = "✕ " + ((e && e.message) || e);
     }));
 
+    /* 右键开关：写进共享存储，两个窗口各自读 */
+    try {
+      var rc = rightClickChk.checked ? "1" : "0";
+      localStorage.setItem("dsh.worktable.rightClick.v1", rc);
+      /* 让本窗口自己立刻生效（storage 事件不会回调自己） */
+      document.dispatchEvent(new CustomEvent("rightclick-change", { detail: rc === "1" }));
+    } catch(e){}
+
     Promise.all(tasks).catch(function(e){
       hkResult.textContent = "✕ " + ((e && e.message) || e);
     });
@@ -8193,6 +8225,43 @@ async function gradeAI(){
       setTimeout(function(){ invoke("appbar_set", { on: true }).catch(function(){}); }, 2500);
     }
   } catch(e){}
+
+  /* ---- 全部快捷键一览 ----
+     把散在代码里的快捷键集中列出来，用户不用翻文档。
+     呼出快捷键是变量（可以改），其余是固定的。 */
+  function paintShortcutList(){
+    var box = document.getElementById("hkList");
+    if (!box) return;
+
+    var callHotkey = (hkInput && hkInput.value) ? hkInput.value : "Ctrl+Alt+Space";
+    var rows = [
+      [callHotkey, "呼出 / 收起侧边栏", "可改"],
+      ["Esc", "收起侧边栏", "侧边栏内"],
+      ["Enter", "提交输入框（插入步骤 / 开始计时 / 保存设置）", "输入框内"],
+      ["双击步骤文字", "编辑这一步的内容", "待办列表"],
+      ["双击任务名", "编辑任务名", "待办列表"],
+      ["单击步骤", "切换完成状态", "待办列表"],
+      ["单击 % 徽标", "设置这一步的完成百分比", "待办列表"],
+      ["单击 🍅", "给这一步开一个番茄钟", "待办列表"],
+      ["单击 ＋", "在这一步后面插入新步骤", "待办列表"]
+    ];
+
+    box.innerHTML = rows.map(function(r){
+      return '<div style="display:flex;gap:10px;align-items:baseline;padding:5px 0;'
+        + 'border-bottom:1px solid rgba(128,128,128,.12)">'
+        + '<code style="flex:none;min-width:150px;padding:2px 8px;border-radius:4px;'
+        + 'background:rgba(217,160,21,.16);color:#d9a015;font-size:11.5px;'
+        + 'font-family:Consolas,Menlo,monospace">' + r[0] + '</code>'
+        + '<span style="flex:1;color:var(--dsw-alias-label-secondary,#9aa4b2)">' + r[1] + '</span>'
+        + '<span style="flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary,#6b6a64)">' + r[2] + '</span>'
+        + '</div>';
+    }).join("");
+  }
+  paintShortcutList();
+  /* 呼出快捷键改完后列表里的第一行也要跟着变 */
+  if (hkInput) {
+    hkInput.addEventListener("hk-changed", paintShortcutList);
+  }
 })();
 
 /* ===== 知识图谱 · 文档查找：搜索 + 长期未访问清单 ===== */
@@ -8907,6 +8976,39 @@ document.querySelectorAll(".lg-head").forEach(function(h){
       setTimeout(function(){ goSettings(r.panel || "sidebar"); }, 500);
     }
   } catch(e){}
+})();
+</script>
+<script>
+/* ---------- 右键开关（主界面）----------
+   默认关闭：整个主界面禁用浏览器右键菜单。
+   在「设置 → 侧边栏 → 启用右键」里可以打开；
+   打开后恢复浏览器默认菜单。
+   输入框里的右键始终放行（粘贴、全选要用）。 */
+(function(){
+  "use strict";
+  var KEY = "dsh.worktable.rightClick.v1";
+  var enabled = false;
+
+  function read(){
+    try { return localStorage.getItem(KEY) === "1"; } catch(e){ return false; }
+  }
+  enabled = read();
+
+  document.addEventListener("contextmenu", function(ev){
+    if (enabled) return;                       /* 开着就不拦 */
+    var t = ev.target;
+    /* 输入框放行：粘贴、全选是刚需 */
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    ev.preventDefault();
+  }, true);
+
+  /* 设置里改了开关：本窗口通过自定义事件、其他窗口通过 storage 事件 */
+  document.addEventListener("rightclick-change", function(ev){
+    enabled = !!(ev.detail);
+  });
+  window.addEventListener("storage", function(ev){
+    if (ev.key === KEY) enabled = ev.newValue === "1";
+  });
 })();
 </script>
 </body>

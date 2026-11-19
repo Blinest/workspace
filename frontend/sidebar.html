@@ -6198,12 +6198,28 @@
      对普通用户没什么用。改成直达侧边栏的设置，改快捷键、
      开关「占住屏幕边缘」都在那里，比记快捷键更直观。
      做法：拦掉 contextmenu，打开主窗口并把页签切到设置。 */
+  /* ---------- 右键 ----------
+     默认禁用：不弹任何菜单。
+     在「设置 → 侧边栏 → 启用右键」里打开后，
+     侧边栏空白处右键 = 打开主窗口的「设置 → 侧边栏」。
+     输入框里右键始终放行（粘贴、全选要用）。 */
+  var RC_KEY = "dsh.worktable.rightClick.v1";
+  var rcEnabled = false;
+  try { rcEnabled = localStorage.getItem(RC_KEY) === "1"; } catch(e){}
+
   document.addEventListener("contextmenu", function(ev){
-    /* 输入框里右键保留系统菜单（粘贴、全选还是要用的） */
     var t = ev.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    /* 无论开没开，系统默认菜单一律不弹 */
     ev.preventDefault();
-    openSidebarSettings();
+    if (rcEnabled) openSidebarSettings();
+  }, true);
+
+  window.addEventListener("storage", function(ev){
+    if (ev.key === RC_KEY) rcEnabled = ev.newValue === "1";
+  });
+  document.addEventListener("rightclick-change", function(ev){
+    rcEnabled = !!(ev.detail);
   });
 
   /* 让主窗口切到「设置」页并滚到侧边栏卡片 */
