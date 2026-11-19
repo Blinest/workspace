@@ -34,4 +34,4 @@ desktop.ini
 /scripts/make-video.sh
 /scripts/make-cards.py
 /scripts/compress-shots.py
-/VERSION.node_modules
+/VERSION.md
