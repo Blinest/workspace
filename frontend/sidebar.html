@@ -266,12 +266,61 @@
   }
   .pullAsk .pa-cancel:hover{ color:var(--sub); }
 
+  /* 卡片区：一屏装下所有卡片。
+     做法：
+       · 今日待办折叠成一行标题，悬停才展开
+       · 其余卡片按内容定高，总高超过视口时**整块区域**滚动
+         （而不是每张卡片各挂一条滚动条，那样右边会挂三四条灰条）
+     滚动条本身隐藏，但滚轮/触摸板照常可用。 */
   .scroll{ flex:1 1 0; min-height:0; overflow-y:auto; overflow-x:hidden;
-    padding:10px; display:flex; flex-direction:column; gap:10px;
-    /* 隐藏滚动条但保留滚动：滚动本身还在，只是不画那道灰条 */
-    scrollbar-width:none;          /* Firefox */
-    -ms-overflow-style:none; }     /* 旧 Edge/IE */
+    padding:8px; display:flex; flex-direction:column; gap:8px;
+    scrollbar-width:none; -ms-overflow-style:none; }
   .scroll::-webkit-scrollbar{ width:0; height:0; display:none; }
+
+  /* 普通卡片：均分剩余高度，让整列铺满视口（不留底部空白）；
+     内容超过上限时自己滚，所以 max-height 和 flex 一起用。
+     ⚠ WebKit 不认 scrollbar-width，必须用 ::-webkit-scrollbar 才能藏掉那条灰条。 */
+  .scroll > .card{ flex:1 1 0; min-height:0; overflow:hidden; }
+  .scroll > .card#cardWeek,
+  .scroll > .card#cardGraph,
+  .scroll > .card#cardDb{ max-height:190px; overflow-y:auto;
+    scrollbar-width:none; -ms-overflow-style:none; }
+  .scroll > .card#cardWeek::-webkit-scrollbar,
+  .scroll > .card#cardGraph::-webkit-scrollbar,
+  .scroll > .card#cardDb::-webkit-scrollbar{ width:0; height:0; display:none; }
+  /* 番茄钟按内容定高，不参与均分（它内容最满，拉高会留空白） */
+  .scroll > .card#cardPomo{ flex:0 0 auto; }
+
+  /* ---- 今日待办：折叠 / 展开 ---- */
+  .scroll > .card#cardTodo{
+    flex:0 0 auto; overflow:hidden; position:relative;
+    transition:flex-grow .25s cubic-bezier(.22,.61,.36,1);
+  }
+  .scroll > .card#cardTodo > h3{ margin:0; }
+  /* 折叠态：正文整段不显示 */
+  body:not(.todoOpen) .scroll > .card#cardTodo > #todoBody,
+  body:not(.todoOpen) .scroll > .card#cardTodo > #todoHint{ display:none !important; }
+  /* 展开态 */
+  body.todoOpen .scroll > .card#cardTodo{
+    flex:0 0 auto; display:flex; flex-direction:column;
+    max-height:300px; overflow:hidden;
+  }
+  body.todoOpen .scroll > .card#cardTodo > h3{ margin:0 0 8px; }
+  body.todoOpen .scroll > .card#cardTodo > #todoBody{
+    display:block !important; flex:1 1 auto; min-height:0;
+    overflow-y:auto; scrollbar-width:none;
+  }
+  body.todoOpen .scroll > .card#cardTodo > #todoBody::-webkit-scrollbar{ width:0; height:0; }
+  body.todoOpen .scroll > .card#cardTodo > #todoHint{ display:block !important; }
+  /* 折叠时标题右侧给个提示 */
+  .scroll > .card#cardTodo > h3::after{
+    content:"悬停展开"; font-size:10px; font-weight:400; color:#b9b2a3;
+    margin-left:auto; flex:none;
+  }
+  body.todoOpen .scroll > .card#cardTodo > h3::after{ content:""; }
+
+  .scroll > .card[hidden]{ display:none !important; }
+
   /* 滚动内容不做任何遮罩：mask 会把文字一起淡掉。
      真正需要柔化的只有窗口边缘的玻璃层，那是 body::before 的事。 */
 
@@ -305,7 +354,7 @@
   /* 悬停时卡片里的小控件也用不透明底，避免透出别的东西显得脏 */
   .card:hover .pomoBtn,
   .card:hover .pomoNoteIn,
-  .card:hover .pomoPick,
+  .card:hover .pomoCur,
   .card:hover .hdBtn,
   .card:hover .addTask,
   .card:hover .miniAct,
@@ -542,8 +591,14 @@
   .pomoGo:hover{ background:#fbeec4; }
   .pomoBtn:disabled{ opacity:.45; cursor:default; }
   .pomoPickWrap{ min-width:0; }
-  .pomoPick{ width:100%; box-sizing:border-box; padding:1px 4px; border:1px solid var(--line);
-    border-radius:5px; background:rgba(255,255,255,.22); font:10.5px/1.6 inherit; font-family:inherit; color:var(--sub); }
+  /* 当前瞄准的步骤（取代原来的下拉框）。
+     内容一行，超长省略；悬停看完整任务名+步骤名。 */
+  .pomoCur{ width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid var(--line);
+    border-radius:5px; background:rgba(255,255,255,.22);
+    font:11px/1.4 inherit; font-family:inherit; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pomoCur.noneState{ color:var(--sub); font-style:italic; }
+  .pomoCur.locked{ background:rgba(217,160,21,.16); border-color:rgba(217,160,21,.45); color:#8a6a10; }
   /* 每日完成情况 */
   .capBlock{ margin-top:10px; border-top:1px dashed #e6e0d1; padding-top:8px; }
   .capHead{ font-size:11px; font-weight:700; color:var(--ink); margin-bottom:4px; }
@@ -742,8 +797,10 @@
           <button class="pomoBtn" id="pomoPause" disabled>⏸ 暂停</button>
           <button class="pomoBtn" id="pomoStop">结束</button>
         </div>
+        <!-- 不再有下拉框：计时对象直接来自待办里点的那一步 🍅。
+             这里只显示「当前瞄准哪一步」，没选就提示去哪里点。 -->
         <div class="pomoPickWrap">
-          <select class="pomoPick" id="pomoPick"></select>
+          <div class="pomoPick pomoCur" id="pomoCur">点下面待办里的 🍅 选一步开始</div>
         </div>
       </div>
     </div>
@@ -766,18 +823,20 @@
     <div id="capBlock" class="capBlock"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardGraph">
     <h3>知识图谱 <span class="mini" id="graphAt"></span></h3>
     <div id="graphBody" class="empty">读取中…</div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardDb">
     <h3>数据库汇总 <span class="mini" id="dbAt"></span></h3>
     <input id="dbQ" class="searchBox" placeholder="搜索数据库 / 笔记本 / 列名…" />
     <div id="dbBody" class="empty">读取中…</div>
   </div>
 
-  <div class="card">
+  <!-- 剪藏助手：默认隐藏（抓取服务依赖 Python + scrapling，不随包分发）。
+       需要时把 hidden 去掉即可恢复。 -->
+  <div class="card" id="cardClip" hidden>
     <h3>剪藏助手 <span class="mini">嵌入简化版</span></h3>
     <!-- allowtransparency + 透明底：让 iframe 内部也透出背后的桌面。
          iframe 里是独立文档，那边的 html/body 也要设成 transparent。 -->
@@ -5696,71 +5755,77 @@
     if (noteEl) noteEl.value = "";
     ptPaint();
   }
-  /* 下拉框：列出今天每条待办的步骤，选中即开始 */
-  /* 下拉框的选项签名。只有选项真的变了才重画 ——
-     renderTodos 会被快照变化频繁触发，每次都重建 innerHTML 的话
-     下拉框会「清空 → 重填」，用户看到的就是一直在跳。 */
-  var _pickSig = "";
+  /* 番茄钟不再有下拉框：计时对象来自待办里点的那一步 🍅。
+     这里只负责把「当前瞄准的是哪一步」显示出来，
+     没有对象时给出引导文字。 */
+  function paintCurStep(){
+    var el = $("pomoCur");
+    if (!el) return;
 
-  function ptBuildPick(){
-    var sel = $("pomoPick");
-    if (!sel) return;
+    /* 有计时对象（在跑 / 暂停）→ 用它；否则看预备框选中的那一步 */
+    var ti = null, si = null, locked = false;
+    if (PT && PT.ti != null && PT.si != null) {
+      ti = PT.ti; si = PT.si; locked = true;
+    } else if (pomoPrepSide && pomoPrepSide.ti != null) {
+      ti = pomoPrepSide.ti; si = pomoPrepSide.si;
+    }
 
-    /* 记住当前选中项：
-       · 有计时对象（不管是否在跑、是否暂停）→ 锁定到正在计的那一步
-       · 没有                → 用用户已经选好的值
-       以前只看 PT.timerId，暂停/从别处接管时 timerId 可能为空，
-       于是退回读 sel.value，选中项就被上一次的残留值带跑了。 */
-    var prev;
-    if (PT && (PT.ti != null) && (PT.si != null)) prev = PT.ti + ":" + PT.si;
-    else prev = String(sel.value || "");
+    if (ti == null) {
+      el.textContent = "点下面待办里的 🍅 选一步开始";
+      el.title = "";
+      el.classList.add("noneState");
+      el.classList.remove("locked");
+      return;
+    }
 
     var raw = readSnapshot();
-    var tk = todayStr();
-    var opts = ['<option value="">选一项开始…</option>'];
-    ((raw && raw.items) || []).forEach(function(t, ti){
-      if (!t) return;
-      if (t.hist) return;
-      if (t.date && t.date !== tk) {
-        var ss = t.subs || [];
-        if (!ss.some(function(s){ return s && !s.done; })) return;
-      }
-      (t.subs || []).forEach(function(s, si){
-        if (!s || s.done) return;
-        opts.push('<option value="' + ti + ':' + si + '">'
-          + esc(String(t.name || "").slice(0, 12)) + ' · ' + esc(String(s.text || "").slice(0, 16))
-          + '</option>');
-      });
-    });
-
-    var html = opts.join("");
-    /* 选项没变 → 一个字都不动，保留用户当前的选择和焦点 */
-    if (html !== _pickSig) {
-      _pickSig = html;
-      sel.innerHTML = html;
+    var t = raw && raw.items && raw.items[ti];
+    var s = t && (t.subs || [])[si];
+    if (!t || !s) {
+      el.textContent = "点下面待办里的 🍅 选一步开始";
+      el.classList.add("noneState");
+      el.classList.remove("locked");
+      return;
     }
 
-    /* 还原选中项：只有真的需要改才动 selectedIndex，
-       无谓的赋值也会让某些浏览器把下拉「复位」一下。 */
-    var want = -1;
-    if (prev) {
-      for (var i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === prev) { want = i; break; }
-      }
-    }
-    if (want < 0) want = 0;
-    if (sel.selectedIndex !== want) sel.selectedIndex = want;
-
-    /* 有计时对象就锁住下拉，避免中途换任务（暂停也算） */
-    var lock = !!(PT && (PT.ti != null) && (PT.si != null));
-    if (sel.disabled !== lock) sel.disabled = lock;
+    el.classList.remove("noneState");
+    el.textContent = String(s.text || "").slice(0, 24);
+    el.title = String(t.name || "") + " · " + String(s.text || "");
+    el.classList.toggle("locked", locked);
   }
+  /* 兼容旧调用点：以前到处调 ptBuildPick()，现在都转到这里 */
+  function ptBuildPick(){ paintCurStep(); }
+
   $("pomoStart").addEventListener("click", function(){
-    var sel = $("pomoPick");
-    var v = sel ? String(sel.value || "") : "";
-    if (!v) { todoHint("先在下面选一项要做的步骤", "#d9a015"); return; }
-    var parts = v.split(":");
-    ptStartForStep(+parts[0], +parts[1]);
+    /* 没有下拉框了：目标来自待办里点过 🍅 的那一步。
+       已经在计时就忽略，避免叠开两个。 */
+    if (PT && PT.timerId) return;
+
+    var ti = null, si = null;
+    if (pomoPrepSide && pomoPrepSide.ti != null) { ti = pomoPrepSide.ti; si = pomoPrepSide.si; }
+    else if (PT && PT.ti != null) { ti = PT.ti; si = PT.si; }
+
+    if (ti == null) {
+      todoHint("先在下面待办里点某一步右边的 🍅", "#d9a015");
+      return;
+    }
+    var raw = readSnapshot();
+    var t = raw && raw.items && raw.items[ti];
+    var s = t && (t.subs || [])[si];
+    if (!t || !s) { todoHint("那一步已经不在了，重新点一次 🍅", "#d9a015"); return; }
+    if (s.done) { todoHint("这一步已经完成了", "#d9a015"); return; }
+
+    /* 从待办里点的 🍅 一定带着预备框（分钟数在里面），直接开始 */
+    if (pomoPrepSide && pomoPrepSide.ti === ti) {
+      var go = document.querySelector(".stepPrepGo");
+      if (go) { go.click(); return; }
+    }
+
+    /* 兜底：没有预备框就按默认时长开一个 */
+    var mins = Number(t.mins) || 25;
+    var n = Math.max(1, (t.subs || []).length);
+    var stepMins = Math.max(5, Math.min(90, Math.round(mins / n / 5) * 5));
+    ptStartNow(ti, si, stepMins, "");
   });
   $("pomoStop").addEventListener("click", function(){ ptFinish(false); });
   $("pomoPause").addEventListener("click", function(){ ptTogglePause(); });
@@ -6715,6 +6780,51 @@
       try { ptBuildPick(); } catch(eP2){}
     } catch(e){}
   });
+
+  /* ---------- 卡片布局：一屏装下全部 ----------
+     今日待办平时折叠成一行标题，鼠标移上去才展开。
+     用 body 上的 .todoOpen 类控制（CSS 里已经写好两套规则）。
+
+     几个细节：
+       · 展开/收起有 250ms 过渡，鼠标在边界抖动时不要反复开关
+         —— 用 90ms 的防抖，离开后稍等一下再收。
+       · 待办内容自身超高时只在卡片内部滚动，不影响别的卡片。
+       · 窗口高度变了（拖高拖矮）要重新算一遍溢出。 */
+  (function(){
+    var card = document.getElementById("cardTodo");
+    if (!card) return;
+    var closeTimer = null;
+
+    function open(){
+      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+      if (!document.body.classList.contains("todoOpen")) {
+        document.body.classList.add("todoOpen");
+      }
+    }
+    function closeSoon(){
+      if (closeTimer) clearTimeout(closeTimer);
+      closeTimer = setTimeout(function(){
+        document.body.classList.remove("todoOpen");
+        closeTimer = null;
+      }, 90);
+    }
+
+    card.addEventListener("mouseenter", open);
+    card.addEventListener("mouseleave", closeSoon);
+    /* 键盘/触摸兜底：点标题也能开关 */
+    var h3 = card.querySelector("h3");
+    if (h3) {
+      h3.style.cursor = "pointer";
+      h3.title = "点击展开 / 收起今日待办";
+      h3.addEventListener("click", function(){
+        if (document.body.classList.contains("todoOpen")) {
+          document.body.classList.remove("todoOpen");
+        } else {
+          open();
+        }
+      });
+    }
+  })();
 
   refresh();
 })();
