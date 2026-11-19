@@ -945,6 +945,26 @@ static PV_SEQ: AtomicU32 = AtomicU32::new(0);
 
 
 /// 鼠标当前是否落在给定矩形里（物理像素）
+/// 取光标屏幕坐标（物理像素）。失败返回 None。
+fn cursor_pos() -> Option<(i32, i32)> {
+    #[repr(C)]
+    struct Pt { x: i32, y: i32 }
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetCursorPos(p: *mut Pt) -> i32;
+    }
+    unsafe {
+        let mut p = Pt { x: 0, y: 0 };
+        if GetCursorPos(&mut p) == 0 { None } else { Some((p.x, p.y)) }
+    }
+}
+
+/// 光标是否落在矩形内
+fn point_in_rect(pt: (i32, i32), r: (i32, i32, i32, i32)) -> bool {
+    let (l, t, rr, b) = r;
+    pt.0 >= l && pt.0 <= rr && pt.1 >= t && pt.1 <= b
+}
+
 fn pointer_inside(rect: Option<(i32, i32, i32, i32)>) -> bool {
     let Some((l, t, r, b)) = rect else { return false };
     #[repr(C)]
@@ -1021,14 +1041,41 @@ pub fn spawn_preview_thread(app: AppHandle) {
                         }
                     }
                     PvCmd::Poll => {
-                        /* 只维护 pin 状态，**不销毁窗口**。
-                           销毁交给前端的 preview_hide —— 那边的判断基于
-                           DOM 的 mouseover/mouseout，比这里靠屏幕坐标
-                           猜光标位置可靠得多。 */
                         if cur.is_none() { continue; }
+
+                        /* 1) 光标在预览窗里 → 钉住 */
                         if pointer_inside(rect) {
                             pinned = true;
+                            continue;
                         }
+
+                        /* 2) 光标在侧边栏里 → 用户可能正在挑另一张卡片，先留着 */
+                        let in_sidebar = match app.get_webview_window(LABEL) {
+                            Some(w) => match (w.outer_position(), w.outer_size()) {
+                                (Ok(p), Ok(sz)) => {
+                                    let sr = (p.x, p.y, p.x + sz.width as i32, p.y + sz.height as i32);
+                                    match cursor_pos() {
+                                        Some(pt) => point_in_rect(pt, sr),
+                                        None => true,
+                                    }
+                                }
+                                _ => true,
+                            },
+                            None => false,
+                        };
+                        if in_sidebar { continue; }
+
+                        /* 3) 两边都不在 → 销毁。
+                           这一步不看任何前端事件，物理位置说了算，
+                           所以「鼠标移开浮层不消失」的问题不会再出现。 */
+                        pinned = false;
+                        rect = None;
+                        if let Some((w2, _)) = cur.take() {
+                            let _ = w2.destroy();
+                        }
+                        ALIVE.store(false, Ordering::SeqCst);
+                        PTR_INSIDE.store(false, Ordering::SeqCst);
+                        PTR_AT.store(0, Ordering::SeqCst);
                     }
                     PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
                         /* 旧窗口先销毁 */

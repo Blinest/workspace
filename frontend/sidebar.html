@@ -2927,7 +2927,7 @@
       s.forcePush = Date.now();
     }).then(function(){
       stepInsFor = null;
-      renderTodos();
+      renderTodos(true);
       try { pushTodos(true, [_projOfName(name)]); } catch(e){}
       todoHint("已插入步骤：" + t0, "#2f7a4f");
     });
@@ -3095,7 +3095,7 @@
       s.forcePush = Date.now();
     }).then(function(){
       stepPctFor = null;
-      renderTodos();
+      renderTodos(true);
       try { pushTodos(true, [_projOfName(name)]); } catch(e){}
       todoHint("「" + stepText + "」进度设为 " + p + "%", "#2f7a4f");
     });
@@ -3158,7 +3158,7 @@
       if (insBtn) {
         ev.stopPropagation();
         stepInsFor = String(insBtn.getAttribute("data-step-ins"));
-        renderTodos();
+        renderTodos(true);
         var ii = document.querySelector('.stepInsIn');
         if (ii) { try { ii.focus(); } catch(e){} }
         return;
@@ -3166,7 +3166,7 @@
       if (el0.closest("[data-ins-cancel]")) {
         ev.stopPropagation();
         stepInsFor = null;
-        renderTodos();
+        renderTodos(true);
         return;
       }
       var insOk = el0.closest("[data-ins-ok]");
@@ -3200,7 +3200,7 @@
       if (el0.closest("[data-pct-cancel]")) {
         ev.stopPropagation();
         stepPctFor = null;
-        renderTodos();
+        renderTodos(true);
         return;
       }
       var pctOk = el0.closest("[data-pct-ok]");
@@ -3232,7 +3232,7 @@
         var nt0 = prepBox.querySelector('.stepPrepNote');
         var note0 = nt0 ? String(nt0.value || "").trim() : "";
         pomoPrepSide = null;
-        try { renderTodos(); } catch(e){}
+        try { renderTodos(true); } catch(e){}
         ptStartNow(pti, psi, m0, note0);
         return;
       }
@@ -6354,8 +6354,15 @@
     try { localStorage.removeItem(ptKey()); } catch(e){}
 
     var raw = readSnapshot();
-    if (raw && raw.items && raw.items[cur.ti]) {
-      var t = raw.items[cur.ti];
+    var _fFi = -1;
+    if (raw && raw.items) {
+      for (var _k = 0; _k < raw.items.length; _k++) {
+        if (raw.items[_k] && raw.items[_k].__oi === cur.ti) { _fFi = _k; break; }
+      }
+      if (_fFi < 0 && raw.items[cur.ti]) _fFi = cur.ti;
+    }
+    if (raw && raw.items && _fFi >= 0) {
+      var t = raw.items[_fFi];
       /* 暂停的时间不算进用时 */
       var elapsedSec = Math.round(
         cur.paused ? (cur.accSec || 0)
@@ -6485,16 +6492,27 @@
      只要快照一变触发 renderTodos，那个 li 就被冲掉，表现为「点了没反应」。 */
   /* （pomoPrepSide 已在 taskHtml 之前声明） */
 
+  /* ⚠ 参数 ti 是**真实下标**（和渲染时挂在元素上的 data-ti 一致），
+     不是过滤后数组的位置。函数内部自己换算。 */
   function ptStartForStep(ti, si){
     /* 同一个再点一次 → 收起 */
     if (pomoPrepSide && pomoPrepSide.ti === ti && pomoPrepSide.si === si) {
       pomoPrepSide = null;
-      try { renderTodos(); } catch(e){}
+      try { renderTodos(true); } catch(e){}
       return;
     }
     var raw = readSnapshot();
-    if (!raw || !raw.items || !raw.items[ti]) return;
-    var t = raw.items[ti];
+    if (!raw || !raw.items) return;
+
+    /* 真实下标 → 数组位置 */
+    var fi = -1;
+    for (var k = 0; k < raw.items.length; k++) {
+      if (raw.items[k] && raw.items[k].__oi === ti) { fi = k; break; }
+    }
+    if (fi < 0 && raw.items[ti]) fi = ti;   /* 未过滤时两者相同 */
+    if (fi < 0) return;
+
+    var t = raw.items[fi];
     if (!(t.subs || [])[si]) return;
 
     var mins = Number(t.mins) || 25;
@@ -6504,7 +6522,9 @@
     var stepMins = Math.max(5, Math.min(90, Math.round(mins / n / 5) * 5));
 
     pomoPrepSide = { ti: ti, si: si, min: stepMins };
-    try { renderTodos(); } catch(e){}
+    /* ⚠ 必须 force：数据没变，只有界面状态变了，
+       不强制就会被他自己的签名节流挡掉，预备框画不出来 */
+    try { renderTodos(true); } catch(e){}
 
     /* 重绘后把焦点放到「这一步在做什么」，光标停在末尾 ——
        这条信息最常改；时长多数时候用默认值。 */
@@ -6525,15 +6545,23 @@
   function ptClosePrep(){
     if (!pomoPrepSide) return;
     pomoPrepSide = null;
-    try { renderTodos(); } catch(e){}
+    try { renderTodos(true); } catch(e){}
   }
 
   /* 真正开始计时。noteIn 来自预备框里「这一步在做什么」，
      优先于顶部番茄钟卡片里的说明框（那是给没开预备框的老路径用的）。 */
+  /* ⚠ ti 是**真实下标**。readSnapshot() 返回完整数组，
+     正常情况下 items[ti] 就是它；但如果数组顺序变过，用 __oi 更稳。 */
   function ptStartNow(ti, si, stepMins, noteIn){
     var raw = readSnapshot();
-    if (!raw || !raw.items || !raw.items[ti]) return;
-    var t = raw.items[ti];
+    if (!raw || !raw.items) return;
+    var fi = -1;
+    for (var k = 0; k < raw.items.length; k++) {
+      if (raw.items[k] && raw.items[k].__oi === ti) { fi = k; break; }
+    }
+    if (fi < 0 && raw.items[ti]) fi = ti;
+    if (fi < 0) return;
+    var t = raw.items[fi];
     var sb = (t.subs || [])[si];
     if (!sb) return;
 
@@ -7912,7 +7940,10 @@
                    「凭空记 25 分钟」而不是「开始计时」。 */
                 if (d.act === "steplog" && siA != null && !isNaN(siA)
                     && typeof ptStartForStep === "function") {
-                  try { ptStartForStep(fiA, siA); } catch(eP){}
+                  /* ptStartForStep 要**真实下标**（和渲染时挂在 data-ti 上的一致），
+                     所以这里优先用 d.ti，不能用 fi。 */
+                  var tiForPomo = d.ti != null ? +d.ti : fiA;
+                  try { ptStartForStep(tiForPomo, siA); } catch(eP){}
                 } else {
                   try { doTaskAction(fiA, d.act, siA); } catch(eA){}
                 }
@@ -8051,14 +8082,10 @@
             var pSi = d.si != null ? +d.si : null;
             var pMin = +d.min || 25;
             var pNote = String(d.note || "");
-            /* 真实下标 → 当前数组位置（两者在未过滤时相同） */
-            var pFi = pTi;
-            for (var pk = 0; pk < raw.items.length; pk++) {
-              if (raw.items[pk] && raw.items[pk].__oi === pTi) { pFi = pk; break; }
-            }
             pomoPrepSide = null;
             try { renderTodos(true); } catch(e){}
-            try { ptStartNow(pFi, pSi, pMin, pNote); } catch(eP0){}
+            /* ptStartNow 内部用 readSnapshot 取对象，参数同样是真实下标 */
+            try { ptStartNow(pTi, pSi, pMin, pNote); } catch(eP0){}
             if (curCard) {
               try {
                 invokeP("preview_update", {

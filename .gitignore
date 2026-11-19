@@ -39,3 +39,5 @@ desktop.ini
 /.snapshot-from-cloud.json
 /*.png
 /.snapshot-from-cloud.json
+/.real-backup.json
+/.extra-tasks.json
