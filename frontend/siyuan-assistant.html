@@ -101,7 +101,7 @@
       </div>
     </div>
     <div class="sy-row">
-      <input id="dlKw" class="dshell-input sy-grow" type="text" placeholder="知网搜索关键词，如：连续体机器人" spellcheck="false" />
+      <input id="dlKw" class="dshell-input sy-grow" type="text" placeholder="知网搜索关键词，如：研究主题" spellcheck="false" />
       <span class="sy-label" id="dlPageSep">—</span>
       <input id="dlFrom" class="dshell-input" type="text" value="1" style="width:52px" title="起始页" />
       <span class="sy-label">—</span>
@@ -210,18 +210,23 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
 
-  // 思源工作区列表（路径 + 内核地址）。
-  // ⚠ 这里**不放 token**：仓库是公开的，凭据一律从本机 localStorage 读。
-  //   每个工作区的 token 存在 dsh.worktable.siyuanTokens.v1（按 work 名索引），
-  //   首次使用时在「连接设置」里填一次即可，之后自动复用。
-  //   只有内核地址（6806）是可读写实例；6808 等是只读发布端口，写操作会被拒。
-  const WORKS = [
-    {name:"0_7_output/output", path:"D:\\0_study\\0_7_output\\output"},
-    {name:"sydata/SiYuan", path:"D:\\5_database\\5_2_privdata\\sydata\\SiYuan"},
-    {name:"sydata/toss",   path:"D:\\5_database\\5_2_privdata\\sydata\\toss"},
-    {name:"sydata/实验数据", path:"D:\\5_database\\5_2_privdata\\sydata\\实验数据"},
-    {name:"0_0_学习规划/plan", path:"D:\\0_study\\0_0_学习规划\\plan"}
-  ];
+  // 思源工作区列表。
+  // ⚠ 这里不写死具体路径：不同机器的工作区目录不一样，
+  //   而且路径本身也属于个人信息。改为读 localStorage：
+  //     dsh.worktable.workspaces.v1 = [{name, path}, ...]
+  //   首次使用时在「连接设置」里添加，之后自动复用。
+  //   没配置时给一条通用示例，用户可自行改。
+  function readWorks(){
+    try{
+      const a = JSON.parse(localStorage.getItem("dsh.worktable.workspaces.v1") || "[]");
+      if (Array.isArray(a) && a.length) {
+        return a.filter(function(w){ return w && w.name; })
+                .map(function(w){ return { name: String(w.name), path: String(w.path || "") }; });
+      }
+    }catch(e){}
+    return [{ name: "默认工作区", path: "" }];
+  }
+  const WORKS = readWorks();
   /* 按工作区名取 token；没有就返回空串（提示用户去填） */
   function tokenOf(name){
     try{
@@ -239,7 +244,12 @@
   }
   /* 给每个工作区补齐 base / token 字段（base 统一用本机内核） */
   WORKS.forEach(w => { w.base = "http://127.0.0.1:6806"; w.token = tokenOf(w.name); });
-  const PROJECT = "D:\\5_database\\5_2_privdata\\dsdata";
+  // 写文件的目标目录：优先用当前工作区的 path，没有就留空（由调用方提示）。
+  // 不写死任何本机绝对路径。
+  function projectDir(){
+    const w = state && state.workspace;
+    return (w && w.path) ? String(w.path).replace(/\/+$/, "") : "";
+  }
   const WRITE_API = "/api/worktable/write";
 
   const state = {
@@ -331,12 +341,15 @@
 
   // ---------- 写入项目文件 ----------
   async function writeProjectFile(fname, content){
+    const dir = projectDir();
+    if (!dir) return { ok: false, path: "", error: "未配置工作区路径" };
+    const target = dir + "\\" + fname;
     const res = await fetch(WRITE_API, {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ path: PROJECT + "\\" + fname, content: content })
+      body: JSON.stringify({ path: target, content: content })
     });
     const j = await res.json().catch(()=>({ok:false}));
-    return { ok: !!j.ok, path: PROJECT + "\\" + fname };
+    return { ok: !!j.ok, path: target };
   }
 
   // ---------- 直连 API ----------
@@ -644,7 +657,7 @@
   $("navCrawl").onclick=()=>navShow("crawl");
   $("navDl").onclick=()=>navShow("dl");
   const DL_SRC={
-    cnki:{port:3922,name:"知网",kind:"pages",label:"知网搜索关键词，如：连续体机器人",dir:"D:/cnki_pdfs",note:"知网逐页下载 PDF（存到 D:/cnki_pdfs/关键词/）。若弹出浏览器验证码，请手动完成。"},
+    cnki:{port:3922,name:"知网",kind:"pages",label:"知网搜索关键词，如：研究主题",dir:"D:/cnki_pdfs",note:"知网逐页下载 PDF（存到 D:/cnki_pdfs/关键词/）。若弹出浏览器验证码，请手动完成。"},
     scholar:{port:3923,name:"谷歌学术",kind:"pages",label:"谷歌学术关键词/期刊，如：soft robotics",dir:"D:/scholar_pdfs",note:"谷歌学术逐篇找 PDF（存到 D:/scholar_pdfs/关键词/）。会弹出系统浏览器过验证，第一次可能在 Cloudflare 等约 20-30 秒或需手动点一下验证码。"},
     link:{port:3924,name:"单篇",kind:"link",label:"粘贴论文 PDF 链接或 DOI 页（如 /doi/pdf/、/doi/abs/…）",dir:"D:/scholar_pdfs",note:"单篇下载（存到所选目录）。平时在后台最小化运行，仅在需要真人验证时弹出窗口。仅开放获取或有权限的能下到。"}
   };

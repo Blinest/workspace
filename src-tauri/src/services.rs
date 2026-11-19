@@ -35,7 +35,7 @@ use std::os::windows::process::CommandExt;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// 老环境里的脚本目录（只作为最后一档兜底）
-const LEGACY_DSDATA: &str = r"D:\5_database\5_2_privdata\dsdata";
+const LEGACY_DSDATA: &str = "";   // 留空 = 不使用老路径兜底
 
 struct Service {
     name: &'static str,

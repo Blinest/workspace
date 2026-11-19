@@ -206,7 +206,7 @@ function buildProjects(records, docTasks){
       if (hit) return hit.task;
     }
     if (!d) return '未命名';
-    /* description 形如 "\~2026-11-11 22:42:26 完成专题四PPT改到能发出去" */
+    /* description 形如 "\~2026-11-11 22:42:26 完成阶段汇报改到能发出去" */
     const m = d.match(/\\?~\s*\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*(.*)$/);
     if (m && m[1].trim()) return m[1].trim();
     const m2 = d.match(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s*(.*)$/);

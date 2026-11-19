@@ -5260,7 +5260,7 @@
          不自动回写任何一端，而是把比对结果显示出来，
          让用户决定「以哪端为准」把数据拉进工作台。 */
       /* 统计口径要正确：只数**真正有任务**的文档。
-         以前把 /KDZN、/概念、/理论基础 这些没有待办的知识库文档
+         以前把 /知识库A、/概念、/理论基础 这些没有待办的知识库文档
          也算了进去，于是「云端 14 条」比实际多好几条，看着像有不一致。 */
       var localCount = 0, cloudCount = 0;
       localDocs.forEach(function(d){ localCount += ((d.items || []).filter(function(x){ return x && x.name; })).length; });
@@ -5311,7 +5311,7 @@
         todoHint("比对完成：本地思源 " + localCount + " 条 / 云端 " + cloudCount + " 条 · " + diffText, "#2f7a4f");
         /* 把两端数据暂存起来，供选择框使用。
            ⚠ 只保留**真正有任务**的文档：云端有 15 个文档，
-           /KDZN、/概念、/理论基础 这些知识库文档没有待办，
+           /知识库A、/概念、/理论基础 这些知识库文档没有待办，
            全算进去会让「云端条数」虚高，看起来像多了一堆任务。 */
         function onlyTaskDocs(list){
           return (list || []).filter(function(d){

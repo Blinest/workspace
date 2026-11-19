@@ -58,7 +58,9 @@ fn candidates() -> Vec<PathBuf> {
     }
     out.push(dev.join("services"));
     out.push(dev.join("scripts"));
-    out.push(PathBuf::from(r"D:\5_database\5_2_privdata\dsdata"));
+    if let Ok(legacy) = std::env::var("DSH_LEGACY_DSDATA") {
+        if !legacy.trim().is_empty() { out.push(PathBuf::from(legacy)); }
+    }
     out.dedup();
     out
 }
