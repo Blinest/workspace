@@ -873,6 +873,65 @@ pub fn snap_sidebar(app: AppHandle, content_w: Option<u32>) -> Result<String, St
     }
 }
 
+/// 把侧边栏临时加宽 / 恢复，供「右侧预览浮层」使用。
+///
+/// 侧边栏本身只有 400px，浮动预览放不下。做法是在**没贴边的那一侧**
+/// 临时把窗口撑开：贴右时向左扩，贴左时向右扩 —— 视觉上像面板
+/// 从内侧滑出来，贴边的那条边始终保持不动。
+///
+/// `extra`：要额外撑开多少逻辑像素（0 = 恢复原宽）。
+/// 返回扩展方向："left" / "right" / ""。
+#[tauri::command]
+pub fn preview_width(app: AppHandle, extra: u32) -> Result<String, String> {
+    let win = app
+        .get_webview_window(LABEL)
+        .ok_or_else(|| "侧边栏窗口不存在".to_string())?;
+
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+    let base_w = (WIDTH * scale).round() as u32;
+    let want_w = base_w + (extra as f64 * scale).round() as u32;
+
+    let cur = win.outer_size().map_err(|e| e.to_string())?;
+    let pos = win.outer_position().map_err(|e| e.to_string())?;
+    if cur.width == want_w {
+        /* 尺寸没变也把方向告诉前端 */
+        return Ok(if edge_side(&win) == SNAP_LEFT { "right".into() } else { "left".into() });
+    }
+
+    /* 记住原始左边，撑开时据此重算 x，保证贴边的边不动 */
+    let dir_left = edge_side(&win) == SNAP_RIGHT; // 贴右 → 向左扩
+
+    if want_w > cur.width {
+        /* 扩大：先挪位置再改宽度，避免中间态闪到屏外 */
+        let dx = (want_w - cur.width) as i32;
+        let new_x = if dir_left { pos.x - dx } else { pos.x };
+        let _ = win.set_position(PhysicalPosition::new(new_x, pos.y));
+        let _ = win.set_size(PhysicalSize::new(want_w, cur.height));
+    } else {
+        /* 缩小：先改宽度再挪回去 */
+        let _ = win.set_size(PhysicalSize::new(want_w, cur.height));
+        let dx = (cur.width - want_w) as i32;
+        let later_x = if dir_left { pos.x + dx } else { pos.x };
+        let _ = win.set_position(PhysicalPosition::new(later_x, pos.y));
+    }
+
+    Ok(if dir_left { "left".into() } else { "right".into() })
+}
+
+/// 当前贴在屏幕的哪一侧
+fn edge_side(win: &WebviewWindow) -> i32 {
+    if let Ok(Some(mon)) = win.current_monitor() {
+        let mp = mon.position();
+        let ms = mon.size();
+        if let (Ok(p), Ok(s)) = (win.outer_position(), win.outer_size()) {
+            let c = mp.x + ms.width as i32 / 2;
+            let wc = p.x + s.width as i32 / 2;
+            return if wc >= c { SNAP_RIGHT } else { SNAP_LEFT };
+        }
+    }
+    SNAP_RIGHT
+}
+
 /// 查询当前吸附落点（调试用）
 #[tauri::command]
 pub fn sidebar_pos(app: AppHandle) -> Result<String, String> {

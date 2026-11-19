@@ -266,60 +266,133 @@
   }
   .pullAsk .pa-cancel:hover{ color:var(--sub); }
 
-  /* 卡片区：一屏装下所有卡片。
-     做法：
-       · 今日待办折叠成一行标题，悬停才展开
-       · 其余卡片按内容定高，总高超过视口时**整块区域**滚动
-         （而不是每张卡片各挂一条滚动条，那样右边会挂三四条灰条）
-     滚动条本身隐藏，但滚轮/触摸板照常可用。 */
+  /* ================= 卡片布局 =================
+     每张卡片是一个固定高度的块，内容超出时在卡片内部滚动
+     （卡片自己带滚动条，能看出「还有内容」）。
+     卡片之间不抢空间，整列在 .scroll 里上下滚。
+
+     三种交互：
+       · 悬停 → 右侧浮出完整预览（只读，不改变卡片本身高度）
+       · 双击标题 → 在侧边栏内展开 / 再双击折叠
+       · 标题右侧的 ⌄ 按钮 → 同上，点一下即知当前状态
+     ============================================ */
   .scroll{ flex:1 1 0; min-height:0; overflow-y:auto; overflow-x:hidden;
     padding:8px; display:flex; flex-direction:column; gap:8px;
-    scrollbar-width:none; -ms-overflow-style:none; }
-  .scroll::-webkit-scrollbar{ width:0; height:0; display:none; }
+    scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.35) transparent; }
+  .scroll::-webkit-scrollbar{ width:6px; }
+  .scroll::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:3px; }
+  .scroll::-webkit-scrollbar-track{ background:transparent; }
 
-  /* 普通卡片：均分剩余高度，让整列铺满视口（不留底部空白）；
-     内容超过上限时自己滚，所以 max-height 和 flex 一起用。
-     ⚠ WebKit 不认 scrollbar-width，必须用 ::-webkit-scrollbar 才能藏掉那条灰条。 */
-  .scroll > .card{ flex:1 1 0; min-height:0; overflow:hidden; }
-  .scroll > .card#cardWeek,
-  .scroll > .card#cardGraph,
-  .scroll > .card#cardDb{ max-height:190px; overflow-y:auto;
-    scrollbar-width:none; -ms-overflow-style:none; }
-  .scroll > .card#cardWeek::-webkit-scrollbar,
-  .scroll > .card#cardGraph::-webkit-scrollbar,
-  .scroll > .card#cardDb::-webkit-scrollbar{ width:0; height:0; display:none; }
-  /* 番茄钟按内容定高，不参与均分（它内容最满，拉高会留空白） */
-  .scroll > .card#cardPomo{ flex:0 0 auto; }
+  /* 卡片：固定高度 + 内部滚动。
+     collapsed 状态下内容不显示，只留标题行。 */
+  .scroll > .card{
+    flex:0 0 auto; position:relative;
+    max-height:216px; overflow-y:auto; overflow-x:hidden;
+    transition:max-height .26s cubic-bezier(.22,.61,.36,1);
+    scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.32) transparent;
+  }
+  .scroll > .card::-webkit-scrollbar{ width:6px; }
+  .scroll > .card::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.3); border-radius:3px; }
+  .scroll > .card::-webkit-scrollbar-track{ background:transparent; }
 
-  /* ---- 今日待办：折叠 / 展开 ---- */
-  .scroll > .card#cardTodo{
-    flex:0 0 auto; overflow:hidden; position:relative;
-    transition:flex-grow .25s cubic-bezier(.22,.61,.36,1);
+  /* 番茄钟内容少，给个更矮的上限 */
+  .scroll > .card#cardPomo{ max-height:none; overflow:hidden; }
+
+  /* ---- 折叠态 ---- */
+  .scroll > .card.isCollapsed{
+    max-height:46px; overflow:hidden;
   }
-  .scroll > .card#cardTodo > h3{ margin:0; }
-  /* 折叠态：正文整段不显示 */
-  body:not(.todoOpen) .scroll > .card#cardTodo > #todoBody,
-  body:not(.todoOpen) .scroll > .card#cardTodo > #todoHint{ display:none !important; }
-  /* 展开态 */
-  body.todoOpen .scroll > .card#cardTodo{
-    flex:0 0 auto; display:flex; flex-direction:column;
-    max-height:300px; overflow:hidden;
+  .scroll > .card.isCollapsed > :not(h3){ display:none !important; }
+
+  /* ---- 展开态（双击 / 点按钮）---- */
+  .scroll > .card.isExpanded{
+    max-height:420px; overflow-y:auto;
   }
-  body.todoOpen .scroll > .card#cardTodo > h3{ margin:0 0 8px; }
-  body.todoOpen .scroll > .card#cardTodo > #todoBody{
-    display:block !important; flex:1 1 auto; min-height:0;
-    overflow-y:auto; scrollbar-width:none;
+
+  /* ---- 标题行：常驻，右侧带折叠按钮 ---- */
+  .scroll > .card > h3{
+    position:sticky; top:0; z-index:2;
+    background:rgba(255,251,238,.97);
+    cursor:pointer;
+    user-select:none;
+    /* 占满卡片宽度，滚动时标题条不会只覆盖一部分 */
+    margin-left:-12px; margin-right:-12px;
+    padding-left:12px; padding-right:12px;
+    padding-top:2px; padding-bottom:2px;
   }
-  body.todoOpen .scroll > .card#cardTodo > #todoBody::-webkit-scrollbar{ width:0; height:0; }
-  body.todoOpen .scroll > .card#cardTodo > #todoHint{ display:block !important; }
-  /* 折叠时标题右侧给个提示 */
-  .scroll > .card#cardTodo > h3::after{
-    content:"悬停展开"; font-size:10px; font-weight:400; color:#b9b2a3;
-    margin-left:auto; flex:none;
+  .scroll > .card.isCollapsed > h3{ margin-bottom:0; }
+
+  /* 折叠/展开按钮：一个小胶囊，箭头 + 状态文字，一眼看出当前是什么状态。
+     折叠时箭头朝右并写「展开」，展开时箭头朝下并高亮写「收起」。 */
+  .cardToggle{
+    flex:none; margin-left:6px;
+    display:inline-flex; align-items:center; gap:3px;
+    height:20px; padding:0 7px;
+    border:1px solid rgba(180,170,150,.45); border-radius:10px;
+    background:rgba(255,255,255,.42); color:#8a8478;
+    font-family:inherit; font-size:10.5px; line-height:1; cursor:pointer;
+    white-space:nowrap;
+    transition:background .2s, border-color .2s, color .2s, box-shadow .2s;
   }
-  body.todoOpen .scroll > .card#cardTodo > h3::after{ content:""; }
+  .cardToggle .ctArrow{
+    display:inline-block; font-size:9px; line-height:1;
+    transition:transform .24s cubic-bezier(.22,.61,.36,1);
+    transform:rotate(-90deg);                       /* 折叠态：箭头朝右 */
+  }
+  .cardToggle:hover{
+    background:#fffdf7; border-color:rgba(180,170,150,.8); color:#4a453d;
+    box-shadow:0 1px 3px rgba(120,110,90,.12);
+  }
+  .cardToggle.open{
+    background:rgba(217,160,21,.16);
+    border-color:rgba(217,160,21,.5);
+    color:#8a6a10;
+  }
+  .cardToggle.open .ctArrow{ transform:rotate(0deg); }  /* 展开态：箭头朝下 */
+  .cardToggle:active{ filter:brightness(.96); }
 
   .scroll > .card[hidden]{ display:none !important; }
+
+  /* ================= 悬浮预览 =================
+     侧边栏只有 400px 宽，浮层放不下。做法是**临时把窗口撑开**：
+     贴右时向左扩，贴左时向右扩 —— 视觉上像抽屉从内侧滑出来，
+     贴边的那条边始终不动。撑开的宽度由 Rust 的 preview_width 命令处理，
+     前端只负责把浮层摆到新腾出来的那块空间里。
+
+     预览是**只读副本**，不响应点击，也不改变卡片本身高度。 */
+  #cardPreview{
+    position:fixed; z-index:9000;
+    width:340px; max-height:78vh; overflow-y:auto;
+    padding:12px 14px;
+    background:rgba(255,251,238,.985);
+    border:1px solid rgba(226,214,186,.75);
+    border-radius:12px;
+    box-shadow:0 4px 10px rgba(120,110,90,.1),
+               0 16px 44px rgba(120,110,90,.2),
+               inset 0 1px 0 rgba(255,255,255,.95);
+    color:var(--ink, #2b2a26); font-size:12px; line-height:1.65;
+    opacity:0; pointer-events:none;
+    transition:opacity .18s ease, transform .18s cubic-bezier(.22,.61,.36,1);
+    scrollbar-width:thin; scrollbar-color:rgba(150,140,120,.35) transparent;
+  }
+  /* 展开方向决定入场动画：向左弹就从右边滑入，反之亦然 */
+  #cardPreview.modeLeft{ transform:translateX(10px); }
+  #cardPreview.modeRight{ transform:translateX(-10px); }
+  #cardPreview.on{ opacity:1; transform:translateX(0); }
+  #cardPreview::-webkit-scrollbar{ width:6px; }
+  #cardPreview::-webkit-scrollbar-thumb{ background:rgba(150,140,120,.32); border-radius:3px; }
+  #cardPreview .pvTitle{
+    font-size:12.5px; font-weight:700; color:var(--brand, #1B365D);
+    margin:0 0 8px; padding-bottom:6px;
+    border-bottom:1px solid rgba(226,214,186,.7);
+    display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+  }
+  #cardPreview .pvTitle .pvHint{
+    margin-left:auto; font-size:10px; font-weight:400; color:#b9b2a3;
+  }
+  #cardPreview .pvBody > *:first-child{ margin-top:0 !important; }
+  #cardPreview .pvBody > *:last-child{ margin-bottom:0 !important; }
+
 
   /* 滚动内容不做任何遮罩：mask 会把文字一起淡掉。
      真正需要柔化的只有窗口边缘的玻璃层，那是 body::before 的事。 */
@@ -6781,50 +6854,256 @@
     } catch(e){}
   });
 
-  /* ---------- 卡片布局：一屏装下全部 ----------
-     今日待办平时折叠成一行标题，鼠标移上去才展开。
-     用 body 上的 .todoOpen 类控制（CSS 里已经写好两套规则）。
+  /* ================= 卡片交互 =================
+     1) 折叠按钮：插在每张卡片标题右侧，点一下折叠/展开
+     2) 双击标题：同样的动作（按钮是给不知道双击的人看的）
+     3) 悬停预览：鼠标停留 450ms 后，在卡片**右侧**浮出完整内容
 
-     几个细节：
-       · 展开/收起有 250ms 过渡，鼠标在边界抖动时不要反复开关
-         —— 用 90ms 的防抖，离开后稍等一下再收。
-       · 待办内容自身超高时只在卡片内部滚动，不影响别的卡片。
-       · 窗口高度变了（拖高拖矮）要重新算一遍溢出。 */
+     预览为什么是副本：卡片本身有 max-height 和滚动条，
+     想「完整看一遍」就得临时拉长 —— 那会把别的卡片挤走。
+     所以做成一个浮层，只读、不占布局。 */
+
   (function(){
-    var card = document.getElementById("cardTodo");
-    if (!card) return;
-    var closeTimer = null;
+    var scrollEl = document.getElementById("scroll");
+    if (!scrollEl) return;
 
-    function open(){
-      if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
-      if (!document.body.classList.contains("todoOpen")) {
-        document.body.classList.add("todoOpen");
-      }
+    /* ---- 折叠状态存 localStorage，重启后保持 ---- */
+    var STATE_KEY = "dsh.worktable.cardCollapsed.v1";
+    var collapsed = {};
+    try { collapsed = JSON.parse(localStorage.getItem(STATE_KEY) || "{}") || {}; } catch(e){ collapsed = {}; }
+
+    function saveState(){
+      try { localStorage.setItem(STATE_KEY, JSON.stringify(collapsed)); } catch(e){}
     }
-    function closeSoon(){
-      if (closeTimer) clearTimeout(closeTimer);
-      closeTimer = setTimeout(function(){
-        document.body.classList.remove("todoOpen");
-        closeTimer = null;
+
+    function cardKey(card, i){
+      return card.id || ("card" + i);
+    }
+
+    var cards = Array.prototype.slice.call(scrollEl.querySelectorAll(":scope > .card"));
+
+    /* ---- 给每张卡片加折叠按钮 ---- */
+    cards.forEach(function(card, i){
+      if (card.hasAttribute("hidden")) return;
+      var h3 = card.querySelector("h3");
+      if (!h3) return;
+
+      var key = cardKey(card, i);
+
+      /* 按钮：⌄ 展开，旋转 180° 表示已展开 */
+      var btn = document.createElement("button");
+      btn.className = "cardToggle";
+      btn.type = "button";
+      btn.setAttribute("data-card-toggle", key);
+      btn.innerHTML = '<span class="ctArrow">▼</span><span class="ctText">展开</span>';
+      btn.title = "展开 / 折叠（双击标题也行）";
+      h3.appendChild(btn);
+      var ctText = btn.querySelector(".ctText");
+
+      /* 恢复上次的折叠状态 */
+      function paint(open){
+        btn.classList.toggle("open", open);
+        ctText.textContent = open ? "收起" : "展开";
+        btn.title = open ? "收起（双击标题也行）" : "展开（双击标题也行）";
+      }
+      if (collapsed[key]) {
+        card.classList.add("isCollapsed");
+        paint(false);
+      } else {
+        paint(true);
+      }
+
+      function toggle(ev){
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        var willCollapse = !card.classList.contains("isCollapsed");
+        card.classList.toggle("isCollapsed", willCollapse);
+        paint(!willCollapse);
+        collapsed[key] = willCollapse;
+        saveState();
+
+        /* 折叠时把滚动位置归零，下次展开从头看 */
+        if (willCollapse) { try { card.scrollTop = 0; } catch(e){} }
+      }
+
+      btn.addEventListener("click", toggle);
+
+      /* 双击标题 = 同样的动作 */
+      h3.addEventListener("dblclick", function(ev){
+        /* 双击按钮本身时别触发两次 */
+        if (ev.target === btn) return;
+        toggle(ev);
+      });
+
+      /* 单击标题不做事，但要挡住文字选中（拖拽时容易误选） */
+      h3.addEventListener("mousedown", function(ev){
+        if (ev.target === btn) return;
+        /* 不 preventDefault：保留滚动条拖动和文本选择的可能性 */
+      });
+    });
+
+    /* ---- 侧边预览 ---- */
+    var pv = document.createElement("div");
+    pv.id = "cardPreview";
+    pv.innerHTML = '<div class="pvTitle"><span class="pvName"></span>'
+                 + '<span class="pvHint">只读预览 · 双击卡片在侧边展开</span></div>'
+                 + '<div class="pvBody"></div>';
+    document.body.appendChild(pv);
+
+    var pvName = pv.querySelector(".pvName");
+    var pvBody = pv.querySelector(".pvBody");
+    var showTimer = null, hideTimer = null, curCard = null;
+
+    /* 侧边栏只有 400px 宽，浮层放不下 —— 悬停时临时把窗口撑开。
+       番茄钟不放预览：它内容紧凑，撑开再收起会让计时器视觉上跳一下。 */
+    var EXPAND_PX = 348;
+    var expandedNow = false;
+    var expandDir = "left";
+
+    function setExpand(on){
+      if (expandedNow === on) return;
+      expandedNow = on;
+      try {
+        var inv = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
+        if (!inv) return;
+        inv("preview_width", { extra: on ? EXPAND_PX : 0 }).then(function(dir){
+          if (dir) expandDir = String(dir);
+          if (on && curCard) {
+            setTimeout(function(){ if (curCard) placePreview(curCard); }, 80);
+          }
+        }).catch(function(){});
+      } catch(e){}
+    }
+
+    function placePreview(anchor){
+      var w = 340;
+      var vw = window.innerWidth || 400;
+      var vh = window.innerHeight || 900;
+      var r = anchor.getBoundingClientRect();
+
+      var left = (expandDir === "right") ? (r.right + 8) : 8;
+      if (left + w > vw - 4) left = Math.max(4, vw - w - 4);
+      var top = Math.max(8, Math.min(r.top, vh - 140));
+      var maxH = Math.min(Math.round(vh * 0.78), vh - top - 10);
+
+      pv.style.cssText = "position:fixed;left:" + Math.round(left) + "px;top:" + Math.round(top)
+        + "px;width:" + w + "px;max-height:" + Math.max(160, maxH) + "px;z-index:9000;"
+        + "overflow-y:auto;padding:12px 14px;box-sizing:border-box;"
+        + "background:rgba(255,251,238,.985);border:1px solid rgba(226,214,186,.75);"
+        + "border-radius:12px;box-shadow:0 4px 10px rgba(120,110,90,.1),0 16px 44px rgba(120,110,90,.2);"
+        + "color:#2b2a26;font-size:12px;line-height:1.65;"
+        + "scrollbar-width:thin;transition:opacity .18s ease;";
+    }
+
+    function doShow(card){
+      var h3 = card.querySelector("h3");
+      if (!h3) return;
+
+      var nameEl = h3.cloneNode(true);
+      var tb = nameEl.querySelector(".cardToggle");
+      if (tb) tb.remove();
+      pvName.textContent = (nameEl.textContent || "").trim() || "预览";
+
+      /* 复制内容（跳过标题），剥掉 id 和交互能力 */
+      var frag = document.createDocumentFragment();
+      Array.prototype.forEach.call(card.children, function(ch){
+        if (ch.tagName === "H3") return;
+        var cp = ch.cloneNode(true);
+        if (cp.querySelectorAll) {
+          Array.prototype.forEach.call(cp.querySelectorAll("[id]"), function(n){ n.removeAttribute("id"); });
+          Array.prototype.forEach.call(cp.querySelectorAll("input,select,button,textarea"), function(n){
+            if (n.tagName === "INPUT" && n.type === "checkbox") { n.disabled = true; return; }
+            n.style.pointerEvents = "none";
+          });
+        }
+        cp.removeAttribute && cp.removeAttribute("id");
+        frag.appendChild(cp);
+      });
+      pvBody.innerHTML = "";
+      pvBody.appendChild(frag);
+
+      curCard = card;
+      setExpand(true);
+      /* 等窗口撑开后再摆位，否则量到的是旧宽度。
+         ⚠ 这期间会触发一次 resize —— 上面的 resize 监听只重排不关闭，
+         否则会出现「刚弹出就被自己撑开的窗口 resize 掉」。 */
+      setTimeout(function(){
+        if (curCard !== card) return;
+        placePreview(card);
+        pv.style.opacity = "1";
+        pv.classList.add("on");
       }, 90);
     }
 
-    card.addEventListener("mouseenter", open);
-    card.addEventListener("mouseleave", closeSoon);
-    /* 键盘/触摸兜底：点标题也能开关 */
-    var h3 = card.querySelector("h3");
-    if (h3) {
-      h3.style.cursor = "pointer";
-      h3.title = "点击展开 / 收起今日待办";
-      h3.addEventListener("click", function(){
-        if (document.body.classList.contains("todoOpen")) {
-          document.body.classList.remove("todoOpen");
-        } else {
-          open();
-        }
-      });
+    function doHide(){
+      pv.style.opacity = "0";
+      pv.classList.remove("on");
+      curCard = null;
+      setExpand(false);
     }
+
+    /* ⚠ 用事件委托挂在 #scroll 上，而不是逐张卡片 addEventListener。
+       卡片内容会被 renderTodos 等频繁重绘，逐张绑定容易绑到已经被
+       替换掉的旧节点上 —— 那样监听器还在，但永远不触发。
+       委托的好处：不管卡片什么时候出现/重建，事件都能接住。 */
+    var hoverCard = null;
+
+    scrollEl.addEventListener("mouseover", function(ev){
+      var card = ev.target && ev.target.closest ? ev.target.closest(".scroll > .card") : null;
+      if (!card) card = (ev.target && ev.target.closest) ? ev.target.closest(".card") : null;
+      if (!card || card.hasAttribute("hidden")) return;
+      if (card.id === "cardPomo") return;          /* 番茄钟不弹预览 */
+      if (card === hoverCard) return;
+      hoverCard = card;
+
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+      if (showTimer) clearTimeout(showTimer);
+      showTimer = setTimeout(function(){
+        showTimer = null;
+        if (hoverCard === card) doShow(card);
+      }, 420);
+    }, true);
+
+    scrollEl.addEventListener("mouseout", function(ev){
+      var to = ev.relatedTarget;
+      /* 还在同一张卡片内部移动 → 什么都不做 */
+      var from = ev.target && ev.target.closest ? ev.target.closest(".card") : null;
+      var into = to && to.closest ? to.closest(".card") : null;
+      if (from && into && from === into) return;
+      if (!from) return;
+
+      hoverCard = null;
+      if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 180);
+    }, true);
+
+    /* 鼠标移到预览上时不消失，方便滚动查看 */
+    pv.addEventListener("mouseenter", function(){
+      if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    });
+    pv.addEventListener("mouseleave", function(){
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 180);
+    });
+
+    /* 滚动后卡片位置变了，预览的位置就对不上了 → 关掉。
+       ⚠ resize 不处理在这个列表里：撑开预览本身就会改窗口宽度，
+       一 resize 就关会变成「弹出即消失」。 */
+    scrollEl.addEventListener("scroll", function(){ if (curCard) doHide(); }, { passive: true });
+    window.addEventListener("resize", function(){
+      /* 撑开/收起自己引起的 resize：只重排位置，别关 */
+      if (curCard) {
+        placePreview(curCard);
+        pv.style.opacity = "1";
+        pv.classList.add("on");
+      }
+    });
+    document.addEventListener("keydown", function(e){
+      if (e.key === "Escape" && curCard) doHide();
+    });
+
   })();
+
 
   refresh();
 })();

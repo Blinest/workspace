@@ -21,6 +21,7 @@ fn main() {
             sidebar::toggle_sidebar,
             sidebar::snap_sidebar,
             sidebar::sidebar_pos,
+            sidebar::preview_width,
             sidebar::move_sidebar,
             sidebar::show_main,
             sidebar::toggle_main,
