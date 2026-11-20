@@ -1041,41 +1041,14 @@ pub fn spawn_preview_thread(app: AppHandle) {
                         }
                     }
                     PvCmd::Poll => {
+                        /* 只维护「钉住」状态，**不主动销毁窗口**。
+                           关闭完全交给前端的 preview_hide ——
+                           那个判断基于 DOM 的 mouseover/mouseout，
+                           不受 DPI 缩放和多屏坐标影响。 */
                         if cur.is_none() { continue; }
-
-                        /* 1) 光标在预览窗里 → 钉住 */
                         if pointer_inside(rect) {
                             pinned = true;
-                            continue;
                         }
-
-                        /* 2) 光标在侧边栏里 → 用户可能正在挑另一张卡片，先留着 */
-                        let in_sidebar = match app.get_webview_window(LABEL) {
-                            Some(w) => match (w.outer_position(), w.outer_size()) {
-                                (Ok(p), Ok(sz)) => {
-                                    let sr = (p.x, p.y, p.x + sz.width as i32, p.y + sz.height as i32);
-                                    match cursor_pos() {
-                                        Some(pt) => point_in_rect(pt, sr),
-                                        None => true,
-                                    }
-                                }
-                                _ => true,
-                            },
-                            None => false,
-                        };
-                        if in_sidebar { continue; }
-
-                        /* 3) 两边都不在 → 销毁。
-                           这一步不看任何前端事件，物理位置说了算，
-                           所以「鼠标移开浮层不消失」的问题不会再出现。 */
-                        pinned = false;
-                        rect = None;
-                        if let Some((w2, _)) = cur.take() {
-                            let _ = w2.destroy();
-                        }
-                        ALIVE.store(false, Ordering::SeqCst);
-                        PTR_INSIDE.store(false, Ordering::SeqCst);
-                        PTR_AT.store(0, Ordering::SeqCst);
                     }
                     PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
                         /* 旧窗口先销毁 */

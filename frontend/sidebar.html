@@ -7851,11 +7851,14 @@
        用 window.screenX/screenY + 当前缩放换算成物理像素。 */
     function sideGeom(){
       var dpr = window.devicePixelRatio || 1;
-      /* screenX/screenY 是 CSS 像素；乘 dpr 得到物理像素 */
+      /* ⚠ 位置和尺寸的换算规则不一样，实测对照：
+           JS screenX = 1307   →  Rust outer_position.x = 1960   （×1.5）
+           JS outerWidth = 401 →  Rust outer_size.width = 400    （1:1）
+         所以：位置要乘 dpr，尺寸不能乘。 */
       var sx = Math.round((window.screenX || 0) * dpr);
       var sy = Math.round((window.screenY || 0) * dpr);
-      var sw = Math.round((window.outerWidth || window.innerWidth || 400) * dpr);
-      var sh = Math.round((window.outerHeight || window.innerHeight || 900) * dpr);
+      var sw = Math.round(window.outerWidth || window.innerWidth || 400);
+      var sh = Math.round(window.outerHeight || window.innerHeight || 900);
 
       /* 判断贴左还是贴右：
          用 RUST 给的是否贴右（它知道当前在哪块屏），
@@ -7874,14 +7877,16 @@
 
     function doShow(card){
       var h3 = card.querySelector("h3");
-      if (!h3) return;
+      if (!h3) { window.__dbgDo += ' → 无h3 return'; return; }
       curCard = card;
       /* 清空推送签名：让自动推送在浮层打开后立即生效 */
       try { if (window.__resetPushSig) window.__resetPushSig(); } catch(e){}
+      window.__pvAlive = true;
       var g = sideGeom();
       var dpr = window.devicePixelRatio || 1;
 
-      /* 顶部基准 = 这张卡片的顶边（不是侧边栏顶） */
+      /* 顶部基准 = 这张卡片的顶边（不是侧边栏顶）。
+         screenY 和 r.top 都是 CSS 像素，加起来再乘 dpr 得物理像素。 */
       var r = card.getBoundingClientRect();
       var topCss = (window.screenY || 0) + r.top;
       var yPx = Math.round(topCss * dpr);
@@ -7893,7 +7898,10 @@
         html: grabHtml(card),
         title: cardTitle(card),
         x: g.x, y: yPx, w: g.w, h: hPx, onRight: g.onRight
-      }).then(startPoll).catch(function(){});
+      }).then(function(){
+        startPoll();
+        startFocusGuard();
+      }).catch(function(){});
     }
 
     /* ---- 浮层常驻 ----
@@ -7934,7 +7942,8 @@
       probe.innerHTML = grabHtml(card);
 
       var hCss = probe.scrollHeight + 24;               /* 加回上下 padding */
-      /* 夹在合理区间：太扁不好看，太高会顶出屏幕 */
+      /* 夹在合理区间：太扁不好看，太高会顶出屏幕。
+         availHeight 是 CSS 像素，和 hCss 同单位，直接用。 */
       var maxH = (window.screen && window.screen.availHeight ? window.screen.availHeight : 900) - 40;
       hCss = Math.max(120, Math.min(hCss, maxH));
       return Math.round(hCss * dpr);
@@ -7947,7 +7956,9 @@
 
     function doHide(){
       curCard = null;
+      window.__pvAlive = false;
       stopPoll();
+      stopFocusGuard();
       invokeP("preview_hide").catch(function(){});
     }
 
@@ -7965,6 +7976,29 @@
        浮层自己会回报（preview-pointer 事件）。
        在里面时绝不能关窗口 —— 用户正在操作。
        离开时给一点缓冲，方便从浮层移回卡片而不闪。 */
+    /* ---- 后端通知「浮层窗口已被销毁」----
+       它按物理光标位置裁决关窗，前端必须同步清掉 curCard，
+       否则下一次悬停会被 scheduleShow 的短路逻辑挡掉。 */
+    (function(){
+      function bindGone(){
+        try {
+          var ev = window.__TAURI__ && window.__TAURI__.event;
+          if (ev && ev.listen) {
+            ev.listen("preview-gone", function(){
+              curCard = null;
+              window.__pvAlive = false;
+              hoverCard = null;
+              if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+              if (typeof stopPoll === "function") stopPoll();
+            });
+            return true;
+          }
+        } catch(e){}
+        return false;
+      }
+      if (!bindGone()) setTimeout(bindGone, 800);
+    })();
+
     window.__pointerInPreview = false;
     var ptrLeaveTimer = null;
     (function(){
@@ -8016,10 +8050,36 @@
       if (pollId) { clearInterval(pollId); pollId = null; }
     }
 
+    /* ---- 兜底：浮层开着但光标既不在浮层、侧边栏也失焦了 ----
+       正常的关闭靠 mouseout / mouseleave，但鼠标快速甩出窗口时
+       这两个事件可能漏掉。这里每 400ms 检查一次：
+       如果侧边栏窗口没有焦点（说明用户去了别处），
+       且光标不在浮层里，就把浮层收掉。 */
+    var focusGuard = null;
+    function startFocusGuard(){
+      stopFocusGuard();
+      focusGuard = setInterval(function(){
+        if (!curCard) { stopFocusGuard(); return; }
+        if (typeof ptrReallyInside === "function" && ptrReallyInside()) return;
+        /* 有焦点说明用户还在侧边栏/浮层里操作，不动 */
+        if (document.hasFocus()) return;
+        /* 无焦点且光标不在浮层 → 收起 */
+        doHide();
+      }, 400);
+    }
+    function stopFocusGuard(){
+      if (focusGuard) { clearInterval(focusGuard); focusGuard = null; }
+    }
+
     function scheduleShow(card){
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       if (showTimer) clearTimeout(showTimer);
-      if (curCard === card) return;
+      /* ⚠ 只有「同一张卡 且 窗口确实还活着」才跳过。
+         后端会按光标位置销毁窗口，但前端可能还记着 curCard，
+         这时直接 return 会让鼠标回到卡片上也弹不出来。 */
+        ' alive=' + String(window.__pvAlive) +
+        ' same=' + (curCard === card);
+      if (curCard === card && window.__pvAlive) return;
       showTimer = setTimeout(function(){
         showTimer = null;
         if (hoverCard === card) doShow(card);
@@ -8034,12 +8094,19 @@
       hoverCard = null;
       if (showTimer) { clearTimeout(showTimer); showTimer = null; }
       if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(function(){ hideTimer = null; doHide(); }, 500);
+      hideTimer = setTimeout(function(){
+        hideTimer = null;
+        /* 光标在浮层里 → 用户正在操作，不要关 */
+        if (typeof ptrReallyInside === "function" && ptrReallyInside()) return;
+        doHide();
+      }, 500);
     }
 
     scrollEl.addEventListener("mouseover", function(ev){
       var t = ev.target;
       var card = (t && t.closest) ? t.closest(".card") : null;
+        ' hidden=' + (card ? card.hasAttribute("hidden") : '-') +
+        ' same=' + (card === hoverCard);
       if (!card || card.hasAttribute("hidden")) return;
       if (card.id === "cardPomo") return;
       if (card === hoverCard) return;
