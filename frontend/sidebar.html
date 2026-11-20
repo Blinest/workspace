@@ -7919,16 +7919,16 @@
            alive = 窗口还在不在（只用于自己校正，不主动清 curCard） */
         invokeP("preview_poll").then(function(r){
           if (r && typeof r === "object") {
-            var wasInside = window.__ptrPhysInside;
+            /* 只同步状态，**不做关闭决策**。
+               关闭交给 mouseout / mouseleave 这些有明确语义的事件；
+               这里每 30ms 判一次太频繁，浮层重绘或坐标细微误差
+               都会让 ptrIn 短暂为 false，一旦误判就把 curCard 清掉，
+               之后所有推送都被跳过 —— 看起来就是「编辑没反应」。 */
             window.__ptrPhysInside = !!r.ptrIn;
             window.__pvAlive = !!r.alive;
-            /* 光标刚离开浮层 → 立刻收，不等其它定时器 */
-            if (wasInside && !r.ptrIn && curCard) {
-              doHide();
-            }
           }
         }).catch(function(){});
-      }, 30);
+      }, 60);
     }
     function stopPoll(){
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
