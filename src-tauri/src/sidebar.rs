@@ -1081,8 +1081,14 @@ pub fn spawn_preview_thread(app: AppHandle) {
                             }
                         }
 
-                        /* 宽度和侧边栏一致（不再是固定 360） */
-                        let pw = sw;
+                        /* 预览宽度比侧边栏宽 20%（400 → 480）。
+                           侧边栏很窄时也保底 420，别挤成一列字。 */
+                        /* pw_css：页面想要的 CSS 宽度（480）
+                           pw_phys：传给窗口 API 的值，要 × sc ——
+                           Tauri 对后建 webview 的尺寸按 scale_factor 折算，
+                           实测传入 481 时页面只有 321（= 481/1.5）。 */
+                        let pw_css: i32 = ((sw as f64) * 1.2).round().max(420.0) as i32;
+                        let pw = pw_css;
                         let gap = 8;
                         let mut px = if on_right { x - pw - gap } else { x + sw + gap };
 
@@ -1128,6 +1134,8 @@ pub fn spawn_preview_thread(app: AppHandle) {
                            —— 不分频的话 150% 缩放下窗口只有三分之二大 */
                         let sc = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
                         let sc = if sc > 0.1 { sc } else { 1.0 };
+                        /* 页面想要的 CSS 宽度换算成窗口 API 需要的值 */
+                        let pw_phys: i32 = ((pw_css as f64) * sc).round() as i32;
                         let seq = PV_SEQ.fetch_add(1, Ordering::Relaxed);
                         let label = format!("preview{}", seq);
 
@@ -1135,7 +1143,9 @@ pub fn spawn_preview_thread(app: AppHandle) {
                             &app, &label, WebviewUrl::App("preview.html".into())
                         )
                         .title("预览")
-                        .inner_size(pw as f64 / sc, h as f64 / sc)
+                        /* ⚠ 实测：这里要乘 sc，不是除。
+                           除的话页面只剩 480/1.5 = 320 宽。 */
+                        .inner_size(pw_phys as f64, h as f64)
                         .position(px as f64 / sc, y as f64 / sc)
                         .decorations(false)
                         .always_on_top(true)
@@ -1148,10 +1158,17 @@ pub fn spawn_preview_thread(app: AppHandle) {
                         .build()
                         {
                             Ok(w) => {
+                                /* 用物理像素设一次，再稍后补一次 ——
+                                   窗口刚建好时 webview 还没跟上 set_size，
+                                   只设一次的话实际渲染宽度会停在 builder
+                                   给的那个逻辑值上（480/1.5 = 320）。 */
                                 let _ = w.set_position(PhysicalPosition::new(px, y));
-                                let _ = w.set_size(PhysicalSize::new(pw as u32, h as u32));
+                                let h_phys: i32 = h;
+                                let _ = w.set_size(PhysicalSize::new(pw_phys as u32, h_phys as u32));
                                 eprintln!("[preview] 已创建 {} @ ({},{}) {}x{}", label, px, y, pw, h);
-                                rect = Some((px, y, px + pw, y + h));
+                                let pw_phys = (pw as f64 * sc) as i32;
+                                let h_phys = (h as f64 * sc) as i32;
+                                rect = Some((px, y, px + pw_phys, y + h_phys));
                                 pinned = false;
                                 cur = Some((w, seq));
                     ALIVE.store(true, Ordering::SeqCst);
