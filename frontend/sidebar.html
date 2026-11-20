@@ -7914,12 +7914,21 @@
     function startPoll(){
       stopPoll();
       pollTimer = setInterval(function(){
-        /* 只让它维护「钉住」状态，不要用它来清 curCard ——
-           Show 内部会先 destroy 旧窗再建新窗，中间有一瞬是"不存在"，
-           轮询正好读到就会把 curCard 误清掉，
-           导致后续所有推送都被 if (!curCard) 跳过。 */
-        invokeP("preview_poll").catch(function(){});
-      }, 220);
+        /* 读回 Rust 给的状态：
+           ptrIn = 光标物理上是否在浮层里（用来判断能不能关）
+           alive = 窗口还在不在（只用于自己校正，不主动清 curCard） */
+        invokeP("preview_poll").then(function(r){
+          if (r && typeof r === "object") {
+            var wasInside = window.__ptrPhysInside;
+            window.__ptrPhysInside = !!r.ptrIn;
+            window.__pvAlive = !!r.alive;
+            /* 光标刚离开浮层 → 立刻收，不等其它定时器 */
+            if (wasInside && !r.ptrIn && curCard) {
+              doHide();
+            }
+          }
+        }).catch(function(){});
+      }, 30);
     }
     function stopPoll(){
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -7955,6 +7964,7 @@
     window.__cardTitleRef = cardTitle;
 
     function doHide(){
+      window.__ptrPhysInside = false;
       curCard = null;
       window.__pvAlive = false;
       stopPoll();
@@ -7967,6 +7977,10 @@
        没有心跳说明浮层那边没机会回报（鼠标直接拖出去、
        或者压根没进去），就当作已离开，不要挡住关闭。 */
     function ptrReallyInside(){
+      /* 优先用 Rust 按**物理位置**算出来的结果（每 220ms 更新一次），
+         它不受前端心跳时机影响，是最可靠的依据。 */
+      if (window.__ptrPhysInside) return true;
+      /* 退路：前端心跳 */
       if (!window.__pointerInPreview) return false;
       var at = window.__ptrInsideAt || 0;
       return (Date.now() - at) < 1500;
@@ -8109,12 +8123,13 @@
       hoverCard = null;
       if (showTimer) { clearTimeout(showTimer); showTimer = null; }
       if (hideTimer) clearTimeout(hideTimer);
+      /* 极短的防抖就够了：判断依据是物理光标位置，不是「等一会儿看看」。
+         120ms 只是为了避免鼠标划过卡片边缘时的抖动。 */
       hideTimer = setTimeout(function(){
         hideTimer = null;
-        /* 光标在浮层里 → 用户正在操作，不要关 */
         if (typeof ptrReallyInside === "function" && ptrReallyInside()) return;
         doHide();
-      }, 500);
+      }, 30);
     }
 
     scrollEl.addEventListener("mouseover", function(ev){
@@ -8165,7 +8180,20 @@
     /* 鼠标离开整个窗口 = 一定收起 */
     /* 鼠标离开侧边栏窗口时不直接关：可能正移向浮层。
        由 Rust 的 poll 判断光标是否在浮层里，在外面才收。 */
-    document.addEventListener("mouseleave", function(){ scheduleHide(); });
+    document.addEventListener("mouseleave", function(){
+      /* 鼠标从侧边栏移进浮层（独立窗口）也会触发这里，
+         但 ptrReallyInside() 是按**物理光标位置**判断的：
+         光标已经在浮层里 → true → 不关；真离开了 → false → 立刻关。
+         所以不需要任何延迟。 */
+      if (showTimer) return;
+      if (!curCard) return;
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(function(){
+        hideTimer = null;
+        if (typeof ptrReallyInside === "function" && ptrReallyInside()) return;
+        doHide();
+      }, 30);
+    });
 
     document.addEventListener("keydown", function(e){
       if (e.key === "Escape" && curCard) doHide();
@@ -8377,7 +8405,7 @@
                 html: grabHtml(curCard) || "",
                 title: cardTitle(curCard)
               }).catch(function(){});
-            }, 120);
+            }, 30);
             return;   /* 已自行刷新，不走下面的通用刷新 */
           }
 

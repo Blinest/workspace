@@ -1045,9 +1045,21 @@ pub fn spawn_preview_thread(app: AppHandle) {
                            关闭完全交给前端的 preview_hide ——
                            那个判断基于 DOM 的 mouseover/mouseout，
                            不受 DPI 缩放和多屏坐标影响。 */
-                        if cur.is_none() { continue; }
-                        if pointer_inside(rect) {
+                        if cur.is_none() {
+                            PTR_INSIDE.store(false, Ordering::SeqCst);
+                            continue;
+                        }
+                        /* 按物理位置维护「光标在浮层里」标记。
+                           这是前端判断"该不该关"的唯一可靠依据。 */
+                        let inside = pointer_inside(rect);
+                        PTR_INSIDE.store(inside, Ordering::SeqCst);
+                        if inside {
                             pinned = true;
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            PTR_AT.store(now, Ordering::SeqCst);
                         }
                     }
                     PvCmd::Show { html, title, x, y, w: sw, h, on_right } => {
@@ -1168,14 +1180,18 @@ pub fn preview_action(app: AppHandle, kind: String, data: serde_json::Value) {
 
 /// 前端：轮询鼠标是否还在预览窗里
 #[tauri::command]
-pub fn preview_poll(_app: AppHandle) -> bool {
+pub fn preview_poll(_app: AppHandle) -> serde_json::Value {
     if let Some(t) = PV_TX.lock().unwrap_or_else(|e| e.into_inner()).clone() {
         let _ = t.send(PvCmd::Poll);
     }
-    /* 顺便告诉前端：预览窗现在到底还在不在。
-       前端用这个来校正 curCard，避免「以为窗口开着、
-       其实早被销毁了，推送全打水漂」。 */
-    ALIVE.load(Ordering::SeqCst)
+    /* 告诉前端两件事：
+       1) 预览窗还在不在（用来校正 curCard）
+       2) 光标是不是**物理上**在预览窗里 ——
+          这个判断在 Rust 侧做，用 GetCursorPos + 窗口矩形，
+          不受前端心跳时机影响，是「该不该关」最可靠的依据。 */
+    let alive = ALIVE.load(Ordering::SeqCst);
+    let ptr_in = alive && PTR_INSIDE.load(Ordering::SeqCst);
+    serde_json::json!({ "alive": alive, "ptrIn": ptr_in })
 }
 
 /// 前端：显示预览

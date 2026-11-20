@@ -1003,8 +1003,15 @@
     document.addEventListener("mouseover", function(){
       if (!wasIn) { wasIn = true; reportPointer(true); }
     }, true);
+    /* 每次移动都回报心跳（限流 300ms），
+       让侧边栏能持续知道「光标还在浮层里」，别把浮层关掉。 */
+    var lastBeat = 0;
     document.addEventListener("mousemove", function(){
-      if (!wasIn) { wasIn = true; reportPointer(true); }
+      wasIn = true;
+      var now = Date.now();
+      if (now - lastBeat < 300) return;
+      lastBeat = now;
+      reportPointer(true);
     }, true);
     document.addEventListener("mouseout", function(ev){
       if (ev.relatedTarget) return;      /* 还在页面里 */
