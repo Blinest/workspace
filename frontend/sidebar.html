@@ -7877,7 +7877,7 @@
 
     function doShow(card){
       var h3 = card.querySelector("h3");
-      if (!h3) { window.__dbgDo += ' → 无h3 return'; return; }
+      if (!h3) return;
       curCard = card;
       /* 清空推送签名：让自动推送在浮层打开后立即生效 */
       try { if (window.__resetPushSig) window.__resetPushSig(); } catch(e){}
@@ -8056,29 +8056,44 @@
        如果侧边栏窗口没有焦点（说明用户去了别处），
        且光标不在浮层里，就把浮层收掉。 */
     var focusGuard = null;
+    var focusLostAt = 0;
     function startFocusGuard(){
       stopFocusGuard();
+      focusLostAt = 0;
       focusGuard = setInterval(function(){
         if (!curCard) { stopFocusGuard(); return; }
-        if (typeof ptrReallyInside === "function" && ptrReallyInside()) return;
-        /* 有焦点说明用户还在侧边栏/浮层里操作，不动 */
-        if (document.hasFocus()) return;
-        /* 无焦点且光标不在浮层 → 收起 */
+
+        /* 光标在浮层里 → 用户正在操作，绝不动 */
+        if (typeof ptrReallyInside === "function" && ptrReallyInside()) {
+          focusLostAt = 0;
+          return;
+        }
+
+        /* 有焦点 → 用户还在侧边栏，不动 */
+        if (document.hasFocus()) {
+          focusLostAt = 0;
+          return;
+        }
+
+        /* ⚠ 失焦不能立刻当作"用户离开了"：
+           浮层一出现、或者切个输入法，侧边栏就可能失焦。
+           这里要求连续失焦 2 秒并且光标确实离开了两边，才收起。 */
+        if (!focusLostAt) { focusLostAt = Date.now(); return; }
+        if (Date.now() - focusLostAt < 2000) return;
+
         doHide();
       }, 400);
     }
     function stopFocusGuard(){
       if (focusGuard) { clearInterval(focusGuard); focusGuard = null; }
+      focusLostAt = 0;
     }
 
     function scheduleShow(card){
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       if (showTimer) clearTimeout(showTimer);
-      /* ⚠ 只有「同一张卡 且 窗口确实还活着」才跳过。
-         后端会按光标位置销毁窗口，但前端可能还记着 curCard，
-         这时直接 return 会让鼠标回到卡片上也弹不出来。 */
-        ' alive=' + String(window.__pvAlive) +
-        ' same=' + (curCard === card);
+      /* 同一张卡且窗口确实还活着，才跳过。
+         窗口可能被关掉但 curCard 还留着，这时必须重建。 */
       if (curCard === card && window.__pvAlive) return;
       showTimer = setTimeout(function(){
         showTimer = null;
