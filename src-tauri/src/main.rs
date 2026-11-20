@@ -9,6 +9,7 @@ mod siyuan;
 mod dragdrop;
 mod weekly;
 mod appbar;
+mod kvstore;
 
 use tauri::Manager;
 
@@ -40,10 +41,28 @@ fn main() {
             appbar::appbar_set,
             dragdrop::take_dropped_files,
             dragdrop::read_file_base64,
-            dragdrop::drag_state
+            dragdrop::drag_state,
+            kvstore::kv_all,
+            kvstore::kv_get,
+            kvstore::kv_set,
+            kvstore::kv_set_many,
+            kvstore::kv_import,
+            kvstore::kv_info
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+            /* 本地 SQLite：先开库，再建窗口 —— 前端一加载就要读数据。 */
+            {
+                let dir = app
+                    .path()
+                    .app_config_dir()
+                    .map(|d| d.join("db"))
+                    .unwrap_or_else(|_| std::path::PathBuf::from("db"));
+                match kvstore::init(dir) {
+                    Ok(()) => eprintln!("[kv] 数据库已就绪: {:?}", kvstore::path()),
+                    Err(e) => eprintln!("[kv] 初始化失败: {}", e),
+                }
+            }
             // 预建侧边栏，并**开机直接显示**：
             // 平时只用侧边栏（待办/番茄钟/剪藏），需要完整工作台时
             // 点侧边栏顶部的按钮把主窗口调出来（主窗口默认 visible:false）。
