@@ -7855,10 +7855,12 @@
            JS screenX = 1307   →  Rust outer_position.x = 1960   （×1.5）
            JS outerWidth = 401 →  Rust outer_size.width = 400    （1:1）
          所以：位置要乘 dpr，尺寸不能乘。 */
+      /* 全部转成物理像素，交给 Rust 侧统一处理。
+         注意 outerWidth 本身是 CSS 像素，也要乘 dpr。 */
       var sx = Math.round((window.screenX || 0) * dpr);
       var sy = Math.round((window.screenY || 0) * dpr);
-      var sw = Math.round(window.outerWidth || window.innerWidth || 400);
-      var sh = Math.round(window.outerHeight || window.innerHeight || 900);
+      var sw = Math.round((window.outerWidth || window.innerWidth || 400) * dpr);
+      var sh = Math.round((window.outerHeight || window.innerHeight || 900) * dpr);
 
       /* 判断贴左还是贴右：
          用 RUST 给的是否贴右（它知道当前在哪块屏），

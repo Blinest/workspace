@@ -1087,9 +1087,20 @@ pub fn spawn_preview_thread(app: AppHandle) {
                            pw_phys：传给窗口 API 的值，要 × sc ——
                            Tauri 对后建 webview 的尺寸按 scale_factor 折算，
                            实测传入 481 时页面只有 321（= 481/1.5）。 */
-                        let pw_css: i32 = ((sw as f64) * 1.2).round().max(420.0) as i32;
-                        let pw = pw_css;
+                        /* sw 是侧边栏的**物理**宽度（前端已 ×dpr）。
+                           预览取 1.2 倍，也是物理像素。 */
+                        let pw: i32 = ((sw as f64) * 1.2).round().max(420.0) as i32;
                         let gap = 8;
+                        /* ⚠ x / sw / pw 都是**物理像素**（前端 screenX×dpr、
+                           侧边栏 outerWidth）。预览贴边留 gap，
+                           算出来的 px 也是物理像素。
+                           后面 .position 要传 CSS 坐标，所以再 /sc —— 
+                           这一步必须和宽度保持一致：
+                           宽度用物理值直接给 inner_size（页面显示 = 物理值），
+                           位置也给物理值 /sc（页面 screenX = 物理/sc）。
+                           两边一致，预览才不会错位。 */
+                        /* 预览的右边缘对准侧边栏左边缘（留 gap）。
+                           注意 pw 是物理像素，所以 px 也是物理像素。 */
                         let mut px = if on_right { x - pw - gap } else { x + sw + gap };
 
                         /* 自纠：跑出屏幕就翻到另一边 */
@@ -1134,8 +1145,7 @@ pub fn spawn_preview_thread(app: AppHandle) {
                            —— 不分频的话 150% 缩放下窗口只有三分之二大 */
                         let sc = app.primary_monitor().ok().flatten().map(|m| m.scale_factor()).unwrap_or(1.0);
                         let sc = if sc > 0.1 { sc } else { 1.0 };
-                        /* 页面想要的 CSS 宽度换算成窗口 API 需要的值 */
-                        let pw_phys: i32 = ((pw_css as f64) * sc).round() as i32;
+                        let pw_phys: i32 = pw;
                         let seq = PV_SEQ.fetch_add(1, Ordering::Relaxed);
                         let label = format!("preview{}", seq);
 
@@ -1146,7 +1156,7 @@ pub fn spawn_preview_thread(app: AppHandle) {
                         /* ⚠ 实测：这里要乘 sc，不是除。
                            除的话页面只剩 480/1.5 = 320 宽。 */
                         .inner_size(pw_phys as f64, h as f64)
-                        .position(px as f64 / sc, y as f64 / sc)
+                        .position(px as f64, y as f64)
                         .decorations(false)
                         .always_on_top(true)
                         .skip_taskbar(true)
