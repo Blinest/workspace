@@ -73,7 +73,13 @@ fn main() {
                         .unwrap_or_else(|_| std::path::PathBuf::from("db"))
                 };
                 match kvstore::init(dir) {
-                    Ok(()) => eprintln!("[kv] 数据库已就绪: {:?}", kvstore::path()),
+                    Ok(()) => {
+                        eprintln!("[kv] 数据库已就绪: {:?}", kvstore::path());
+                        /* settings.json 里手改过的值优先（方便用户直接编辑），
+                           再回写一次保证文件存在且格式规整。 */
+                        kvstore::sync_settings_from_json();
+                        kvstore::write_settings_json_now();
+                    }
                     Err(e) => eprintln!("[kv] 初始化失败: {}", e),
                 }
             }

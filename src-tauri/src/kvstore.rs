@@ -121,6 +121,17 @@ pub fn kv_get(key: String) -> Result<Option<String>, String> {
 /// 用一个事务写完，比逐条写快一个数量级。
 #[tauri::command]
 pub fn kv_set_many(pairs: Vec<(String, String)>) -> Result<usize, String> {
+    let n = kv_set_many_impl(pairs)?;
+    /* 写完之后把设置同步到 JSON。放在这里而不是 impl 里，
+       避免启动时 sync_settings_from_json 自己触发自己。 */
+    if let Err(e) = write_settings_json() {
+        eprintln!("[kv] 写 settings.json 失败: {}", e);
+    }
+    Ok(n)
+}
+
+/// 真正写库的逻辑。不碰 JSON，避免递归。
+pub fn kv_set_many_impl(pairs: Vec<(String, String)>) -> Result<usize, String> {
     if pairs.is_empty() {
         return Ok(0);
     }
@@ -201,6 +212,95 @@ pub fn kv_import(pairs: Vec<(String, String)>) -> Result<usize, String> {
         .filter(|(k, v)| !existing.contains_key(k) && !v.is_empty())
         .collect();
     kv_set_many(todo)
+}
+
+
+/* ================= 设置 JSON 镜像 ================= */
+
+/// 哪些键算「设置」。运行时数据（待办快照、番茄状态、缓存）不进来。
+fn is_setting_key(k: &str) -> bool {
+    matches!(
+        k,
+        "dsh.worktable.appbar.v1"
+            | "dsh.worktable.rightClick.v1"
+            /* 注意：hotkey 不在这里。
+               热键的真实状态由系统注册决定，前端启动时会用
+               get_hotkey 的实际值覆盖缓存 —— 手改 JSON 会被冲掉，
+               放进来只会误导。改热键请到设置页按组合键。 */
+            | "dsh.worktable.invoice.v1"
+            | "dsh.worktable.scope.v1"
+            | "dsh.worktable.scopekids.v1"
+            | "dsh.worktable.autosteps.v1"
+            | "dsh.worktable.tipsai.v1"
+            | "dsh.worktable.pausePush"
+            | "dsh.worktable.openSettings.v1"
+    )
+}
+
+fn settings_path() -> Option<std::path::PathBuf> {
+    DB_PATH.get().and_then(|p| p.parent()).map(|d| d.join("settings.json"))
+}
+
+/// 把当前设置写进 JSON 文件。
+/// 格式：{ "说明": "...", "设置": { "dsh.worktable.appbar.v1": "1", ... } }
+/// 值都是字符串（和 localStorage 语义一致），JSON 里也是字符串。
+fn write_settings_json() -> Result<(), String> {
+    let path = settings_path().ok_or_else(|| "取不到数据库目录".to_string())?;
+    let all = kv_all()?;
+    let mut map = serde_json::Map::new();
+    let mut keys: Vec<&String> = all.keys().filter(|k| is_setting_key(k)).collect();
+    keys.sort();
+    for k in keys {
+        if let Some(v) = all.get(k) {
+            map.insert(k.clone(), serde_json::Value::String(v.clone()));
+        }
+    }
+    let doc = serde_json::json!({
+        "_说明": "思源科研工作台的设置。程序会自动维护，直接改也能生效（重启后读取）。",
+        "_路径": "dsh.worktable.* 是键名，删除某个键表示恢复默认。",
+        "设置": serde_json::Value::Object(map),
+    });
+    let txt = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    std::fs::write(&path, txt).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 从 JSON 读回设置。文件存在但格式坏了就跳过，不影响启动。
+fn read_settings_json() -> Option<std::collections::HashMap<String, String>> {
+    let path = settings_path()?;
+    let txt = std::fs::read_to_string(&path).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&txt).ok()?;
+    let obj = v.get("设置")?.as_object()?;
+    let mut out = std::collections::HashMap::new();
+    for (k, val) in obj {
+        if is_setting_key(k) {
+            if let Some(s) = val.as_str() {
+                out.insert(k.clone(), s.to_string());
+            } else if val.is_number() || val.is_boolean() {
+                /* 手改时可能写成数字/布尔，宽容处理 */
+                out.insert(k.clone(), val.to_string());
+            }
+        }
+    }
+    Some(out)
+}
+
+/// 启动时回写一次 JSON，保证文件存在、格式规整。
+pub fn write_settings_json_now() {
+    if let Err(e) = write_settings_json() {
+        eprintln!("[kv] 生成 settings.json 失败: {}", e);
+    }
+}
+
+/// 启动时：JSON 里有的设置覆盖到 SQLite（以 JSON 为准，方便手改生效）。
+pub fn sync_settings_from_json() {
+    if let Some(m) = read_settings_json() {
+        if m.is_empty() {
+            return;
+        }
+        let pairs: Vec<(String, String)> = m.into_iter().collect();
+        let _ = kv_set_many_impl(pairs);
+    }
 }
 
 
