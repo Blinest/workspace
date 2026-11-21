@@ -47,7 +47,9 @@ fn main() {
             kvstore::kv_set,
             kvstore::kv_set_many,
             kvstore::kv_import,
-            kvstore::kv_info
+            kvstore::kv_info,
+            kvstore::kv_backup,
+            kvstore::kv_backup_list
         ])
         .setup(|app| {
             let handle = app.handle().clone();

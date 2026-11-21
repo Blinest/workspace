@@ -203,6 +203,125 @@ pub fn kv_import(pairs: Vec<(String, String)>) -> Result<usize, String> {
     kv_set_many(todo)
 }
 
+
+/* ================= 备份 ================= */
+
+/// 手动备份数据库到 数据库目录\\backup\\YYYY-MM-DD_HHMMSS\\。
+///
+/// 用 SQLite 的 VACUUM INTO 做一致快照 ——
+/// 直接复制 .db 文件在 WAL 模式下可能拿到不完整的数据，
+/// VACUUM INTO 会先把 WAL 合并、再写出一份干净的副本。
+#[tauri::command]
+pub fn kv_backup() -> Result<serde_json::Value, String> {
+    let dbp = DB_PATH
+        .get()
+        .ok_or_else(|| "数据库未初始化".to_string())?
+        .clone();
+    let root = dbp.parent().ok_or_else(|| "取不到数据库目录".to_string())?;
+
+    let dir = root.join("backup").join(local_stamp());
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let out = dir.join("worktable.db");
+
+    /* VACUUM INTO 会把当前库（含 WAL 里未合并的部分）完整写出去 */
+    let target = out.to_string_lossy().replace('\'', "''");
+    with_db(|conn| {
+        conn.execute_batch(&format!("VACUUM INTO '{}'", target))?;
+        Ok(())
+    })?;
+
+    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+
+    /* 只保留最近 10 份，旧的自动删掉 */
+    let backup_root = root.join("backup");
+    let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir(&backup_root)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect()
+        })
+        .unwrap_or_default();
+    dirs.sort();
+    while dirs.len() > 10 {
+        let old = dirs.remove(0);
+        let _ = std::fs::remove_dir_all(&old);
+    }
+
+    Ok(serde_json::json!({
+        "path": out.to_string_lossy(),
+        "bytes": bytes,
+        "kept": dirs.len(),
+    }))
+}
+
+/// 列出已有备份（新的在前）。
+#[tauri::command]
+pub fn kv_backup_list() -> Result<Vec<serde_json::Value>, String> {
+    let dbp = match DB_PATH.get() {
+        Some(p) => p.clone(),
+        None => return Ok(vec![]),
+    };
+    let root = match dbp.parent() {
+        Some(p) => p.join("backup"),
+        None => return Ok(vec![]),
+    };
+    if !root.exists() {
+        return Ok(vec![]);
+    }
+    let mut out = vec![];
+    let rd = std::fs::read_dir(&root).map_err(|e| e.to_string())?;
+    for e in rd.flatten() {
+        let p = e.path();
+        if !p.is_dir() {
+            continue;
+        }
+        let db = p.join("worktable.db");
+        let bytes = std::fs::metadata(&db).map(|m| m.len()).unwrap_or(0);
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        out.push(serde_json::json!({
+            "name": name,
+            "path": db.to_string_lossy(),
+            "bytes": bytes
+        }));
+    }
+    out.sort_by(|a, b| {
+        let x = a["name"].as_str().unwrap_or("");
+        let y = b["name"].as_str().unwrap_or("");
+        y.cmp(x)
+    });
+    Ok(out)
+}
+
+/// 本地时间戳 YYYY-MM-DD_HHMMSS。
+/// 不引 chrono（体积优先），用系统命令拿 —— Windows 上开销很小。
+fn local_stamp() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        /* CREATE_NO_WINDOW：别弹黑框 */
+        use std::os::windows::process::CommandExt;
+        let out = Command::new("powershell")
+            .args(["-NoProfile", "-Command", "Get-Date -Format yyyy-MM-dd_HHmmss"])
+            .creation_flags(0x08000000)
+            .output();
+        if let Ok(o) = out {
+            let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if s.len() >= 15 {
+                return s;
+            }
+        }
+    }
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("epoch-{secs}")
+}
+
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
