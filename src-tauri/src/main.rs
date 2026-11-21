@@ -51,13 +51,25 @@ fn main() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
-            /* 本地 SQLite：先开库，再建窗口 —— 前端一加载就要读数据。 */
+            /* 本地 SQLite：先开库，再建窗口 —— 前端一加载就要读数据。
+               库文件放在用户指定的固定位置，方便备份和查看：
+                 D:\5_database\5_2_privdata\database\worktable.db
+               那个目录不存在时（换了机器/盘符），退回应用配置目录。 */
             {
-                let dir = app
-                    .path()
-                    .app_config_dir()
-                    .map(|d| d.join("db"))
-                    .unwrap_or_else(|_| std::path::PathBuf::from("db"));
+                let preferred = std::path::PathBuf::from(r"D:\5_database\5_2_privdata\database");
+                let dir = if preferred
+                    .parent()
+                    .map(|p| p.exists())
+                    .unwrap_or(false)
+                    || std::fs::create_dir_all(&preferred).is_ok()
+                {
+                    preferred
+                } else {
+                    app.path()
+                        .app_config_dir()
+                        .map(|d| d.join("db"))
+                        .unwrap_or_else(|_| std::path::PathBuf::from("db"))
+                };
                 match kvstore::init(dir) {
                     Ok(()) => eprintln!("[kv] 数据库已就绪: {:?}", kvstore::path()),
                     Err(e) => eprintln!("[kv] 初始化失败: {}", e),
