@@ -330,7 +330,22 @@ pub fn kv_backup() -> Result<serde_json::Value, String> {
         Ok(())
     })?;
 
-    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+    let mut bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+
+    /* 设置也一起备份：先把内存里的设置刷进 settings.json，
+       再复制到备份目录，保证备份里的配置和数据是同一时刻的。 */
+    let mut settings_bytes = 0u64;
+    if write_settings_json().is_ok() {
+        if let Some(sp) = settings_path() {
+            if let Ok(txt) = std::fs::read(&sp) {
+                let dst = dir.join("settings.json");
+                if std::fs::write(&dst, &txt).is_ok() {
+                    settings_bytes = txt.len() as u64;
+                    bytes += settings_bytes;
+                }
+            }
+        }
+    }
 
     /* 只保留最近 10 份，旧的自动删掉 */
     let backup_root = root.join("backup");
@@ -351,6 +366,8 @@ pub fn kv_backup() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "path": out.to_string_lossy(),
         "bytes": bytes,
+        "dbBytes": bytes - settings_bytes,
+        "settingsBytes": settings_bytes,
         "kept": dirs.len(),
     }))
 }
@@ -377,7 +394,10 @@ pub fn kv_backup_list() -> Result<Vec<serde_json::Value>, String> {
             continue;
         }
         let db = p.join("worktable.db");
-        let bytes = std::fs::metadata(&db).map(|m| m.len()).unwrap_or(0);
+        let db_bytes = std::fs::metadata(&db).map(|m| m.len()).unwrap_or(0);
+        let st = p.join("settings.json");
+        let has_settings = st.exists();
+        let st_bytes = std::fs::metadata(&st).map(|m| m.len()).unwrap_or(0);
         let name = p
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -385,7 +405,10 @@ pub fn kv_backup_list() -> Result<Vec<serde_json::Value>, String> {
         out.push(serde_json::json!({
             "name": name,
             "path": db.to_string_lossy(),
-            "bytes": bytes
+            "bytes": db_bytes + st_bytes,
+            "dbBytes": db_bytes,
+            "settingsBytes": st_bytes,
+            "hasSettings": has_settings
         }));
     }
     out.sort_by(|a, b| {

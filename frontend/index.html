@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.5.3 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.5.4 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1503,7 +1503,7 @@ html, body { margin: 0; padding: 0; }
           <div class="dshell-card">
             <h2 class="dshell-sub" style="margin:0 0 4px">本地数据库</h2>
             <p class="lg-note" style="margin:0 0 10px">
-              待办快照、settings、各种缓存都存在这个 SQLite 文件里。备份会做一份一致快照，
+              待办快照、各种缓存存在这个 SQLite 文件里，设置存在同目录的 <code>settings.json</code>。
               出问题时可以直接用备份覆盖回去。
             </p>
             <div class="lg-field">
@@ -1517,7 +1517,7 @@ html, body { margin: 0; padding: 0; }
               <span id="kvResult" class="lg-hint"></span>
             </div>
             <p class="lg-note" style="margin:8px 0 0">
-              备份存在数据库目录下的 <code>backup\日期时间\</code>，自动保留最近 10 份。
+              备份存在数据库目录下的 <code>backup\日期时间\</code>（含 worktable.db + settings.json），自动保留最近 10 份。
             </p>
           </div>
 
@@ -1555,7 +1555,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.5.3</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.5.4</span>
   </div>
 </div>
 
@@ -8241,7 +8241,8 @@ async function gradeAI(){
       }).then(function(list){
         if (!list || !list.length) return;
         var last = list[0];
-        statEl.textContent += " · 已有 " + list.length + " 份备份（最近 " + last.name + "）";
+        statEl.textContent += " · 已有 " + list.length + " 份备份（最近 " + last.name +
+          (last.hasSettings ? "，含设置" : "") + "）";
       }).catch(function(){
         statEl.textContent = "数据库未就绪";
       });
@@ -8253,7 +8254,8 @@ async function gradeAI(){
       resEl.textContent = "备份中…";
       resEl.style.color = "";
       invoke("kv_backup").then(function(r){
-        resEl.textContent = "已备份 " + fmtBytes(r.bytes) + "（保留 " + r.kept + " 份）";
+        var extra = r.settingsBytes > 0 ? "，含设置 " + fmtBytes(r.settingsBytes) : "";
+        resEl.textContent = "已备份 " + fmtBytes(r.bytes) + extra + "（保留 " + r.kept + " 份）";
         resEl.style.color = "#2f7a4f";
         refresh();
       }).catch(function(e){
