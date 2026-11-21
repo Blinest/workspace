@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 思源科研工作台 v0.5.4 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
+<!-- 思源科研工作台 v0.6.1 · 生成于 2026-09-16 · 单文件、零依赖、数据只在你本机 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -1415,8 +1415,7 @@ html, body { margin: 0; padding: 0; }
             <div style="height:12px"></div>
             <div class="lg-actions">
               <button id="btnTest" class="dshell-btn dshell-btnGhost">测试连接</button>
-              <button id="btnLoad" class="dshell-btn">保存并加载</button>
-              <span id="testResult" class="lg-hint"></span>
+              <span id="testResult" class="lg-hint">填写后自动保存</span>
             </div>
             <div class="dshell-divider"></div>
             <p class="lg-note">令牌只保存在本机 localStorage，不上传、不写入文件。连接思源后，窗口自动抽取文档 / 标签 / 标题构建图谱，并用 AI 生成今日待办。</p>
@@ -1455,8 +1454,57 @@ html, body { margin: 0; padding: 0; }
             </div>
             <div style="height:12px"></div>
             <div class="lg-actions">
-              <button id="wsSave" class="dshell-btn">保存并测试</button>
+              <button id="wsTest" class="dshell-btn dshell-btnGhost">测试连接</button>
               <span id="wsResult" class="lg-hint"></span>
+            </div>
+          </div>
+
+          <div class="dshell-card">
+            <h2 class="dshell-sub" style="margin:0 0 4px">同步</h2>
+            <p class="lg-note" style="margin:0 0 10px">
+              本地数据一改动就自动推到「本地思源 + 云端思源」。拉取按固定频率查新，本地查得勤一些，云端慢一些（云端接口慢、也怕被打）。
+            </p>
+
+            <div class="lg-field">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input id="syncAutoPush" type="checkbox" style="margin:0" />
+                <span>改动后自动推送</span>
+              </label>
+            </div>
+            <div style="height:10px"></div>
+
+            <div class="lg-field">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input id="syncAutoPull" type="checkbox" style="margin:0" />
+                <span>定时自动拉取</span>
+              </label>
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>本地拉取间隔</label>
+              <select id="syncLocalEvery" class="dshell-input">
+                <option value="30">30 秒</option>
+                <option value="60">1 分钟</option>
+                <option value="120">2 分钟</option>
+                <option value="300">5 分钟</option>
+              </select>
+            </div>
+            <div style="height:8px"></div>
+            <div class="lg-field">
+              <label>云端拉取间隔</label>
+              <select id="syncCloudEvery" class="dshell-input">
+                <option value="120">2 分钟</option>
+                <option value="300">5 分钟</option>
+                <option value="600">10 分钟</option>
+                <option value="1800">30 分钟</option>
+              </select>
+            </div>
+
+            <p class="lg-note" id="syncState" style="margin:8px 0 0">—</p>
+            <div style="height:10px"></div>
+            <div class="lg-actions">
+              <button id="syncPullNow" class="dshell-btn dshell-btnGhost">立即拉取</button>
+              <span id="syncResult" class="lg-hint"></span>
             </div>
           </div>
 
@@ -1495,7 +1543,7 @@ html, body { margin: 0; padding: 0; }
             </p>
             <div style="height:12px"></div>
             <div class="lg-actions">
-              <button id="hkSave" class="dshell-btn">保存</button>
+
               <span id="hkResult" class="lg-hint"></span>
             </div>
           </div>
@@ -1503,11 +1551,11 @@ html, body { margin: 0; padding: 0; }
           <div class="dshell-card">
             <h2 class="dshell-sub" style="margin:0 0 4px">本地数据库</h2>
             <p class="lg-note" style="margin:0 0 10px">
-              待办快照、各种缓存存在这个 SQLite 文件里，设置存在同目录的 <code>settings.json</code>。
+              这个目录里有：<code>worktable.db</code>（待办快照和缓存）、<code>settings.json</code>（设置）、<code>backup\</code>（备份）。
               出问题时可以直接用备份覆盖回去。
             </p>
             <div class="lg-field">
-              <label>数据库位置</label>
+              <label>数据目录</label>
               <input id="kvPath" class="dshell-input" readonly style="cursor:default" />
             </div>
             <p class="lg-note" id="kvStat" style="margin:6px 0 0">—</p>
@@ -1532,7 +1580,7 @@ html, body { margin: 0; padding: 0; }
             </div>
             <div style="height:12px"></div>
             <div class="lg-actions">
-              <button id="svcSave" class="dshell-btn">保存并测试</button>
+              <button id="svcTest" class="dshell-btn dshell-btnGhost">测试连接</button>
               <span id="svcResult" class="lg-hint"></span>
             </div>
           </div>
@@ -1555,7 +1603,7 @@ html, body { margin: 0; padding: 0; }
     <span class="lg-footSep">·</span>
     <span>© 2026 作者保留所有权利，禁止二次分发或转售</span>
     <span class="lg-spacer"></span>
-    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.5.4</span>
+    <span class="lg-footHint">本地运行 · 数据不出本机 · v0.6.1</span>
   </div>
 </div>
 
@@ -6573,7 +6621,7 @@ async function gradeAI(){
 `)}const _n=(function(){const t=new Uint32Array(256);for(let e=0;e<256;e++){let n=e;for(let s=0;s<8;s++)n=n&1?3988292384^n>>>1:n>>>1;t[e]=n>>>0}return t})();function zn(t){let e=4294967295;for(let n=0;n<t.length;n++)e=_n[(e^t[n])&255]^e>>>8;return(e^4294967295)>>>0}function nt(t){return new TextEncoder().encode(t)}function Un(t){const e=[],n=[],s=d=>new Uint8Array([d&255,d>>>8&255]),a=d=>new Uint8Array([d&255,d>>>8&255,d>>>16&255,d>>>24&255]);let o=0;t.forEach(d=>{const u=nt(d.name),m=zn(d.data),S=d.data.length;[a(67324752),s(20),s(2048),s(0),s(23585),s(0),a(m),a(S),a(S),s(u.length),s(0)].forEach(w=>e.push(w)),e.push(u,d.data),n.push({nb:u,crc:m,size:S,offset:o}),o+=30+u.length+S});const r=o;n.forEach(d=>{[a(33639248),s(20),s(20),s(2048),s(0),s(23585),s(0),a(d.crc),a(d.size),a(d.size),s(d.nb.length),s(0),s(0),s(0),s(0),a(0),a(d.offset)].forEach(u=>e.push(u)),e.push(d.nb)});const c=e.reduce((d,u)=>d+u.length,0)-r;[a(101010256),s(0),s(0),s(n.length),s(n.length),a(c),a(r),s(0)].forEach(d=>e.push(d));const i=new Uint8Array(e.reduce((d,u)=>d+u.length,0));let l=0;return e.forEach(d=>{i.set(d,l),l+=d.length}),i}function Gt(t){return String(t??"").replace(/[&<>"']/g,e=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&apos;"})[e]).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,"")}function Ce(t){let e="",n=t+1;for(;n>0;){const s=(n-1)%26;e=String.fromCharCode(65+s)+e,n=Math.floor((n-1)/26)}return e}function Wn(t,e){let n='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';return n+='<row r="1">'+t.map((s,a)=>'<c r="'+Ce(a)+'1" s="1" t="inlineStr"><is><t xml:space="preserve">'+Gt(s.name||"(未命名列)")+"</t></is></c>").join("")+"</row>",e.forEach((s,a)=>{const o=a+2;n+='<row r="'+o+'">'+t.map((r,c)=>{const i=et(t,s,r),l=Ce(c)+o;return i.num!==null&&i.num!==void 0&&!isNaN(i.num)?'<c r="'+l+'"><v>'+i.num+"</v></c>":i.text===""?"":'<c r="'+l+'" t="inlineStr"><is><t xml:space="preserve">'+Gt(i.text)+"</t></is></c>"}).join("")+"</row>"}),n+"</sheetData></worksheet>"}function Vt(t,e){let n=String(t||"Sheet").replace(/[\\\/\?\*\[\]:]/g,"_").slice(0,28)||"Sheet",s=n,a=2;for(;e.has(s);)s=n.slice(0,26)+"_"+a++;return e.add(s),s}function Ie(t){const e=[],n=['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'];e.push({name:"_rels/.rels",data:nt('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')});let s="",a="";t.forEach((r,c)=>{const i=c+1;n.push('<Override PartName="/xl/worksheets/sheet'+i+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'),e.push({name:"xl/worksheets/sheet"+i+".xml",data:nt(Wn(r.keys,r.rows))}),s+='<sheet name="'+Gt(r.name)+'" sheetId="'+i+'" r:id="rId'+i+'"/>',a+='<Relationship Id="rId'+i+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+i+'.xml"/>'}),n.push("</Types>"),e.push({name:"[Content_Types].xml",data:nt(n.join(""))});const o=t.length+1;return a+='<Relationship Id="rId'+o+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',e.push({name:"xl/workbook.xml",data:nt('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+s+"</sheets></workbook>")}),e.push({name:"xl/_rels/workbook.xml.rels",data:nt('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+a+"</Relationships>")}),e.push({name:"xl/styles.xml",data:nt('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>')}),{bytes:Un(e),sheets:t.length}}function X(t,e){return{id:t,name:e,type:"text"}}function ct(t,e){return{id:t,name:e,type:"number"}}function G(t){return{type:"text",text:{content:t}}}function lt(t){return{type:"number",number:{content:t,isNotEmpty:!0}}}function Kn(){const t=new Set(["总览"]),e=[],n=[X("0","笔记本"),X("1","数据库"),X("2","路径"),ct("3","行数"),ct("4","列数"),X("5","最近更新")],s=f.list.map(a=>({cells:{0:G(a.notebookName),1:G(a.name),2:G((a.hpaths||[]).join(" / ")),3:lt(a.rows.length),4:lt(a.keys.length),5:G(gt(a.updated))}}));return e.push({name:"总览",keys:n,rows:s}),f.list.forEach(a=>e.push({name:Vt(a.notebookName+"-"+a.name,t),keys:a.keys,rows:a.rows})),Ie(e)}const Ot={block:"条目",text:"文本",number:"数值",select:"单选",mSelect:"多选",checkbox:"勾选",date:"日期",url:"链接",mAsset:"文件",relation:"关联",rollup:"汇总",template:"公式",created:"创建时间",updated:"更新时间"};function Xn(t){const e=new Set,n=Vt(t.name,e),s=[X("0","列名"),X("1","类型"),ct("2","合计"),ct("3","均值"),ct("4","最大"),ct("5","最小"),X("6","完成情况"),X("7","取值分布 Top10")],a=yt(t.keys,t.rows).map(o=>{const r={};return r[0]=G(o.key.name||"(未命名列)"),r[1]=G(Ot[o.key.type]||o.key.type||""),o.isNum&&(r[2]=lt(Math.round(o.sum*100)/100),r[3]=lt(Math.round(o.avg*100)/100),r[4]=lt(o.max),r[5]=lt(o.min)),o.key.type==="checkbox"&&(r[6]=G(o.checked+" / "+t.rows.length)),o.dist&&(r[7]=G(o.dist.slice(0,10).map(([c,i])=>c+"×"+i).join("、"))),{cells:r}});return Ie([{name:n,keys:t.keys,rows:t.rows},{name:Vt("统计",e),keys:s,rows:a}])}function Le(t,e,n){const s=new Blob([e],{type:n}),a=URL.createObjectURL(s),o=document.createElement("a");o.href=a,o.download=t,o.style.cssText="position:fixed;left:-9999px",document.body.appendChild(o),o.click(),setTimeout(()=>{try{URL.revokeObjectURL(a),o.remove()}catch{}},4e3)}const Be="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";function Oe(){const t=new Date,e=n=>String(n).padStart(2,"0");return t.getFullYear()+e(t.getMonth()+1)+e(t.getDate())}function Gn(t){return String(t??"").replace(/[\\\/:*?"<>|]/g,"_").trim()}function Vn(){if(!f.list.length){M("还没有数据可导出");return}try{M("正在生成 XLSX…");const t=Kn(),e="思源数据库汇总-"+Oe()+".xlsx";Le(e,t.bytes,Be),M("已导出 "+e+"（"+t.sheets+" 个工作表，含总览）")}catch(t){M("导出失败："+(t.message||t))}}function Jn(t){try{M("正在生成「"+t.name+"」的 XLSX…");const e=Xn(t),n=Gn(t.notebookName+"-"+t.name)+"-"+Oe()+".xlsx";Le(n,e.bytes,Be),M("已导出 "+n+"（数据 "+t.rows.length+" 行 + 统计表）")}catch(e){M("导出失败："+(e.message||e))}}function je(t,e){const n=()=>M(e);try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(n).catch(()=>M("复制失败：浏览器不允许访问剪贴板"));return}}catch{}try{const s=document.createElement("textarea");s.value=t,s.style.cssText="position:fixed;left:-9999px",document.body.appendChild(s),s.select(),document.execCommand("copy"),s.remove(),n()}catch{M("复制失败，请手动选择表格内容")}}function Yn(){if(!f.list.length){M("还没有数据可复制");return}const t=f.list.map(e=>"=== "+e.notebookName+" › "+(e.hpaths||[]).join(" / ")+" › "+e.name+" ("+e.rows.length+` 行) ===\r
 `+Ne(e));je(t.join(`\r
 \r
-`),"已复制全部 "+f.list.length+" 个数据库（CSV）")}const Jt={text:1,number:1,select:1,mSelect:1,checkbox:1,date:1,url:1},Re={block:"「条目」列绑定的是真实文档，需要在思源里改",mAsset:"「文件」列要在思源里上传",relation:"关联列要在思源里选择",rollup:"汇总列由关联自动算出",template:"公式列由思源自动算",created:"创建时间自动生成",updated:"更新时间自动生成"};function V(t,e){return'<div class="db-stat"><span class="db-statL">'+t+'</span><span class="db-statV">'+e+"</span></div>"}function Qn(t,e){for(const n of t.keys){const s=et(t.keys,e,n);if(s.text)return s.text}return"(空行)"}function Zn(t){const e=[];return f.list.forEach(n=>{if(!n.rows.length)return;const s=n.rows.length;yt(n.keys,n.rows).forEach(a=>{const o=a.filled===0,r=!!(f.edit&&f.edit.avId===n.avId&&f.edit.keyId===a.key.id);o||r?e.push({db:n,key:a.key,stat:a,total:s,blank:o}):t&&a.filled<s&&e.push({db:n,key:a.key,stat:a,total:s,blank:!1})})}),e}function qe(t,e,n){return et(t.keys,n,e).text}function De(t,e){return t.type==="checkbox"?e==="✓"||e==="1"||e==="true"?"1":"":e==null?"":String(e)}function Yt(t,e){const n=[],s=f.edit&&f.edit.vals||{};return Object.keys(s).forEach(a=>{const o=t.rows.find(c=>c.id===a);if(!o)return;const r=De(e,qe(t,e,o));String(s[a])!==r&&n.push({rowId:a,raw:s[a]})}),n}function ts(t,e){const n=String(e??"");switch(t){case"text":return{type:"text",text:{content:n}};case"url":return{type:"url",url:{content:n}};case"number":{if(n.trim()==="")return{type:"number",number:{content:0,isNotEmpty:!1,format:"",formattedContent:""}};const s=Number(n);return isNaN(s)?null:{type:"number",number:{content:s,isNotEmpty:!0,format:"",formattedContent:String(s)}}}case"select":case"mSelect":{let s=n.split(/[，,;；\n]/).map(a=>a.trim()).filter(Boolean).map(a=>({content:a,color:""}));return t==="select"&&(s=s.slice(0,1)),{type:"mSelect",mSelect:s}}case"checkbox":return{type:"checkbox",checkbox:{checked:n==="1"||n==="true"||n==="✓"}};case"date":{if(n.trim()==="")return{type:"date",date:{content:0,isNotEmpty:!1,content2:0,isNotEmpty2:!1,hasEndDate:!1}};const s=new Date(n.trim()+"T00:00:00");return isNaN(s.getTime())?null:{type:"date",date:{content:s.getTime(),isNotEmpty:!0,content2:0,isNotEmpty2:!1,hasEndDate:!1,isNotTime:!0}}}default:return null}}function es(t,e){const n=!!Jt[e.type],s=Ot[e.type]||e.type||"";let a='<div class="db-edit">';if(a+='<div class="db-editHead"><span class="db-hint">填写</span><b>'+k(e.name||"(未命名列)")+'</b><span class="db-pill">'+k(s)+'</span><span class="db-hint">'+k(t.notebookName)+" › "+k((t.hpaths||[]).join(" / "))+" · 共 "+t.rows.length+' 行</span><span class="db-spacer"></span><button class="db-btn" data-act="editclose">关闭</button></div>',!n)return a+'<div class="db-empty">这一列不能在这里填写：'+k(Re[e.type]||"「"+s+"」类型需在思源里修改")+"。</div></div>";if(e.type==="checkbox")a+='<div class="db-editBatch"><button class="db-btn" data-act="all1">全部勾选</button><button class="db-btn" data-act="all0">全部取消</button><span class="db-hint">也可以逐行勾选</span></div>';else{const m=e.type==="date"?' type="date"':e.type==="number"?' type="number" step="any"':"";a+='<div class="db-editBatch"><span class="db-hint">统一值</span><input class="db-inp" data-batch="1"'+m+' placeholder="输入后点右侧按钮，填到所有行" /><button class="db-btn" data-act="fillall">填充到全部行</button><button class="db-btn" data-act="clearall">清空填写</button>'+(e.type==="select"||e.type==="mSelect"?'<span class="db-hint">多选值用「,」分隔</span>':"")+"</div>"}const o="dbdl-"+e.id,r=(e.options||[]).map(m=>m.name||m.content||"").filter(Boolean),c=300,i=t.rows.slice(0,c),l=f.edit&&f.edit.vals||{};a+='<div class="db-editRows">',i.forEach(m=>{const S=qe(t,e,m),w=k(Qn(t,m));if(e.type==="checkbox"){const p=(l[m.id]!==void 0?l[m.id]:De(e,S))==="1";a+='<label class="db-editRow"><input type="checkbox" data-row="'+k(m.id)+'"'+(p?" checked":"")+' /><span class="db-editLabel" title="'+w+'">'+w+"</span></label>"}else if(e.type==="date"){const p=l[m.id]!==void 0?l[m.id]:S;a+='<label class="db-editRow"><span class="db-editLabel" title="'+w+'">'+w+'</span><input class="db-inp" type="date" data-row="'+k(m.id)+'" value="'+k(p)+'" /></label>'}else{const p=l[m.id]!==void 0?l[m.id]:S,y=e.type==="number"?' type="number" step="any"':r.length?' list="'+o+'"':"";a+='<label class="db-editRow"><span class="db-editLabel" title="'+w+'">'+w+'</span><input class="db-inp" data-row="'+k(m.id)+'" value="'+k(p)+'"'+y+" /></label>"}}),a+="</div>",r.length&&(a+='<datalist id="'+o+'">'+r.map(m=>'<option value="'+k(m)+'"></option>').join("")+"</datalist>"),t.rows.length>c&&(a+='<div class="db-hint">只显示前 '+c+" 行（共 "+t.rows.length+" 行）</div>");const d=Yt(t,e).length,u=!!(f.edit&&f.edit.armed);return a+='<div class="db-editFoot"><button class="db-btn db-save" data-act="save">'+(u?"确认写入 "+d+" 项":d?"写入思源（"+d+" 项改动）":"写入思源")+'</button><span class="db-editMsg">'+(u?"再次点击才会真正写入思源":"只写入你改动过的单元格；留空表示不填")+"</span></div>",a+"</div>"}function st(){const t=h("dbList");if(!t)return;if(f.focus&&(f.focus=null,xt(t)),!f.list.length){h("dbStats").innerHTML="",t.innerHTML='<div class="db-empty">还没有读到数据库，请先确认思源已启动。</div>';return}const e=!!(h("dbBlankPartial")&&h("dbBlankPartial").checked),n=z(h("dbSearch")?h("dbSearch").value:""),s=Zn(e).filter(c=>!n||z(c.key.name+" "+c.db.name+" "+c.db.notebookName+" "+(c.db.hpaths||[]).join(" ")).includes(n));if(h("dbStats").innerHTML=V("空白字段",s.length)+V("完全空白",s.filter(c=>c.blank).length)+V("涉及数据库",new Set(s.map(c=>c.db.avId)).size)+V("可直接写入",s.filter(c=>Jt[c.key.type]).length),!s.length){t.innerHTML='<div class="db-empty">没有空白字段'+(e?"":"——可以勾选上面的「含部分空白」看看填了一部分的列")+"。</div>";return}const a=new Map;Wt(),s.forEach(c=>{const i=c.db.notebookName||"未分类";a.has(i)||a.set(i,new Map);const l=a.get(i);l.has(c.db.avId)||l.set(c.db.avId,{db:c.db,items:[]}),l.get(c.db.avId).items.push(c)});const o=c=>Array.from(c.values()).reduce((i,l)=>i+l.db.rows.length,0),r=Array.from(a.entries()).sort((c,i)=>o(i[1])-o(c[1]));t.innerHTML=r.map(([c,i])=>{const l=Array.from(i.values()).sort((S,w)=>w.db.rows.length-S.db.rows.length),d=l.reduce((S,w)=>S+w.items.length,0),u=ve(c);let m='<div class="db-grp" style="border-left-color:'+u+";background:"+we(u,.05)+'"><div class="db-nb"><span class="db-nbDot" style="background:'+u+'"></span><span class="db-nbN" style="color:'+u+'">'+k(c)+'</span><span class="db-nbS">'+d+" 个空白字段 · "+l.length+" 个数据库</span></div>";return l.forEach(({db:S,items:w})=>{m+='<div class="db-card" data-avid="'+k(S.avId)+'" style="border-left:3px solid '+u+'"><div class="db-cHead"><span class="db-name">'+k(S.name)+'</span><span class="db-meta">'+k((S.hpaths||[]).join(" / "))+" · "+S.rows.length+" 行 × "+S.keys.length+' 列</span><a class="db-btn" href="siyuan://blocks/'+k(S.blockId)+'" data-act="jump" title="在思源笔记里打开这个数据库">↗ 在思源打开</a></div>',w.forEach(p=>{const y=!!Jt[p.key.type];m+='<div class="db-bf"><span class="db-bfName">'+k(p.key.name||"(未命名列)")+'</span><span class="db-pill">'+k(Ot[p.key.type]||p.key.type||"")+'</span><span class="db-bfCnt">已填 <b>'+p.stat.filled+"</b> / "+p.total+(p.blank?"（完全空白）":"")+'</span><span class="db-spacer"></span>'+(y?'<button class="db-btn" data-act="edit" data-avid="'+k(S.avId)+'" data-keyid="'+k(p.key.id)+'">填写</button>':'<span class="db-hint" title="'+k(Re[p.key.type]||"")+'">不可直接填写</span>')+"</div>",f.edit&&f.edit.avId===S.avId&&f.edit.keyId===p.key.id&&(m+=es(S,p.key))}),m+="</div>"}),m+"</div>"}).join("")}function ns(t,e){f.edit&&f.edit.avId===t&&f.edit.keyId===e?f.edit=null:f.edit={avId:t,keyId:e,vals:{},armed:!1},st()}async function ss(t){const e=await _("/api/av/getAttributeView",{id:t.avId}),n=e&&e.av;n&&(t.keys=(n.keyValues||[]).map(s=>s.key).filter(s=>s&&s.id),t.rows=me(n))}async function as(t,e){const n=Yt(t,e);if(!n.length){M("没有需要写入的改动");return}if(!f.edit.armed){f.edit.armed=!0,st();return}const s=h("dbStatus");let a=0,o=0,r="";for(const c of n){const i=ts(e.type,c.raw);if(!i){o++,r=r||"无法识别的值："+c.raw;continue}try{await _("/api/av/setAttributeViewBlockAttr",{avID:t.avId,keyID:e.id,itemID:c.rowId,value:i}),a++}catch(l){o++,r=r||l.message||String(l)}s&&(s.textContent="正在写入 "+t.notebookName+" · "+t.name+" ："+(a+o)+" / "+n.length+" …")}try{await ss(t)}catch{}f.edit.armed=!1,f.edit.vals={},st(),M("写入完成：成功 "+a+" 项"+(o?" · 失败 "+o+" 项（"+r+"）":"")+" · 已重新读取该库")}function os(){const t=h("dbList");if(!t||!f.edit)return;const e=f.list.find(r=>r.avId===f.edit.avId);if(!e)return;const n=e.keys.find(r=>r.id===f.edit.keyId);if(!n)return;const s=Yt(e,n).length,a=t.querySelector('.db-edit [data-act="save"]'),o=t.querySelector(".db-edit .db-editMsg");a&&(a.textContent=f.edit.armed?"确认写入 "+s+" 项":s?"写入思源（"+s+" 项改动）":"写入思源"),o&&(o.textContent=f.edit.armed?"再次点击才会真正写入思源":"只写入你改动过的单元格；留空表示不填")}function Fe(){const t=f.edit;if(!t)return null;const e=f.list.find(s=>s.avId===t.avId);if(!e)return null;const n=e.keys.find(s=>s.id===t.keyId);return n?{db:e,key:n}:null}function rs(){const t=h("dbList");if(!t)return;t.addEventListener("click",l=>{const d=l.target.closest("[data-act]");if(!d)return;const u=d.dataset.act;if(u==="edit"){ns(d.dataset.avid,d.dataset.keyid);return}if(u==="ai"){const w=d.closest(".db-card"),p=w?f.list.find(y=>y.avId===w.dataset.avid):null;p&&Hn(p,!0);return}if(u==="editclose"){f.edit=null,st();return}if(u==="save"){const w=Fe();w&&as(w.db,w.key);return}if(u==="all1"||u==="all0"||u==="fillall"||u==="clearall"){const w=Fe();if(!w)return;const p=f.edit;if(u==="clearall")p.vals={};else if(u==="all1"||u==="all0")w.db.rows.forEach(y=>{p.vals[y.id]=u==="all1"?"1":""});else{const y=t.querySelector(".db-edit .db-editBatch .db-inp"),g=y?y.value:"";w.db.rows.forEach(x=>{p.vals[x.id]=g})}p.armed=!1,st();return}const m=d.closest(".db-card"),S=m?f.list.find(w=>w.avId===m.dataset.avid):null;if(S){if(u==="jump"){l.preventDefault(),$n(S);return}if(u==="toggle"){const w=m.querySelector(".db-body");if(w.style.display!=="none"){if(w.style.display="none",d.textContent="展开数据",d.classList.remove("db-on"),f.focus===m.dataset.avid){f.focus=null;const y=h("dbList");y&&(xt(y),Ct())}}else f.focus=m.dataset.avid,be(h("dbList"));return}if(u==="meta"){const w=m.classList.toggle("db-metaOff");d.classList.toggle("db-on",!w),d.textContent=w?"显示统计":"收起统计",requestAnimationFrame(()=>Ut(m,h("dbList")));return}if(u==="csv"){je(Ne(S),"已复制「"+S.name+"」的 CSV（"+S.rows.length+" 行）");return}if(u==="xlsx"){Jn(S);return}}});const e=l=>{const d=l.target;!d||!d.dataset||!d.dataset.row||!f.edit||(f.edit.vals[d.dataset.row]=d.type==="checkbox"?d.checked?"1":"":d.value,f.edit.armed&&(f.edit.armed=!1),os())};t.addEventListener("input",e),t.addEventListener("change",e);const n=h("dbViewSeg");n&&n.addEventListener("click",l=>{const d=l.target.closest("[data-dbview]");if(!d)return;n.querySelectorAll(".db-segBtn").forEach(m=>m.classList.toggle("db-segOn",m===d)),f.view=d.dataset.dbview,f.edit=null;const u=h("dbPartialWrap");u&&(u.style.display=f.view==="blank"?"inline-flex":"none"),Ct()});const s=h("dbBlankPartial");s&&s.addEventListener("change",()=>{f.edit=null,st()});const a=h("dbSearch");a&&a.addEventListener("input",()=>Ct());const o=h("dbRefresh");o&&o.addEventListener("click",()=>{f.loaded=!1,He(!0)});const r=h("dbOpenAll");r&&r.addEventListener("click",Yn);const c=h("dbXlsx");c&&c.addEventListener("click",Vn);const i=h("dbAiAll");i&&i.addEventListener("click",Pn)}async function He(t){if(f.loading||f.loaded&&!t)return;f.loading=!0;const e=h("dbStatus"),n=h("dbList");e&&(e.textContent="正在读取思源数据库…"),n&&(n.innerHTML='<div class="db-empty"><span class="lg-loading"></span> 正在读取思源里的「数据库」…</div>');try{const s={};try{const d=await _("/api/notebook/lsNotebooks",{});(d&&d.notebooks||[]).forEach(u=>{u&&u.id&&(s[u.id]=(u.name||"").trim()||"未命名笔记本")})}catch{}const a=await ht("SELECT id, box, hpath, updated FROM blocks WHERE type='av'"),o=new Map;for(const d of a){let u="";try{const p=await _("/api/block/getBlockKramdown",{id:d.id});u=p&&p.kramdown||""}catch{continue}const m=u.match(/data-av-id="([^"]+)"/);if(!m)continue;const S=m[1];let w=o.get(S);w||(w={avId:S,blockId:d.id,box:d.box,notebookName:s[d.box]||"未分类笔记",hpaths:[],updated:Number(d.updated)||0,name:"",keys:[],rows:[]},o.set(S,w)),d.hpath&&w.hpaths.indexOf(d.hpath)<0&&w.hpaths.push(d.hpath)}const r=Array.from(o.values());let c=0,i=0;for(const d of r){c++,e&&(e.textContent="正在读取数据库数据 "+c+" / "+r.length+"（"+d.hpaths[0]+"）…");let u=null;try{const m=await _("/api/av/getAttributeView",{id:d.avId});u=m&&m.av}catch{u=null}if(!u){d.broken=!0,i++;continue}d.name=(u.name||"").trim()||(d.hpaths[0]||"").split("/").filter(Boolean).pop()||"未命名数据库",d.keys=(u.keyValues||[]).map(m=>m.key).filter(m=>m&&m.id),d.rows=me(u)}f.list=r.filter(d=>!d.broken),f.loaded=!0,Ct();const l=f.list.reduce((d,u)=>d+u.rows.length,0);e&&(e.textContent="✓ 已汇总 "+f.list.length+" 个数据库 · "+l+" 行数据"+(i?" · "+i+" 个读取失败":"")+" · "+new Date().toLocaleTimeString())}catch(s){n&&(n.innerHTML=b.settings.token?'<div class="db-empty">读取失败：'+k(s.message||s)+"<br>请在「设置」中确认思源 API 地址与令牌（当前 "+k(b.settings.base||"")+"）。</div>":'<div class="db-empty">还没连上思源 —— 请先到「设置」页填一次 API 令牌，回来点「刷新数据」即可。<br><button class="db-btn" id="dbGoSetup" style="margin-top:8px">去填写 →</button></div>'),e&&(e.textContent="✕ "+(s.message||s))}finally{f.loading=!1}}function Pe(t,e){return`<html><body style='margin:0;background:#f6f4ec;color:#7a746a;font:13px/1.75 "Microsoft YaHei",system-ui,sans-serif;padding:30px'><div style='font-size:15px;font-weight:600;color:#1B365D;margin-bottom:8px'>`+t+" · 可选模块，本次未加载</div><div>这个页签需要一份 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"+e+"</code>，启用两步：</div><div style='margin-top:8px'>① 把 "+e+" 放进<b>本文件所在的同一个文件夹</b>；</div><div>② 用记事本打开本文件，找到顶部的 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>window.DSW_CONFIG.subPages</code>，把 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"+e.replace(/\.html$/,"")+`</code> 那一项改成 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"`+e+'"</code>（也可以填完整路径），保存后刷新本页。</div></body></html>'}function $e(t,e,n,s){if(!t)return;t.style.flex="1 1 0",t.style.minHeight="0";const a=Ke[e];if(a&&ee){fetch(ee+encodeURIComponent(a)).then(o=>{if(!o.ok)throw new Error("HTTP "+o.status);return o.text()}).then(o=>{t.srcdoc=o}).catch(o=>{t.srcdoc=Pe(s+"（读取失败："+String(o&&o.message||o)+"）",n)});return}if(a){t.src=a;return}t.srcdoc=Pe(s,n)}function is(){/* 周报已并入工作规划页的子视图，原 iframe 方案（wkFrame）作废，这里保留空实现以防旧引用报错 */}let jt=!1,Rt=null,dt="0";async function Qt(){try{const t=await _("/api/query/sql",{stmt:"SELECT max(updated) AS m FROM blocks"});return t&&t[0]&&String(t[0].m)||dt}catch{return dt}}async function cs(){if(!jt||b.loading)return;const t=await Qt();t&&t!==dt&&(dt=t,await bt(!1))}function ls(t){jt=!!t;const e=h("autoSync");e&&(e.checked=jt),Rt&&(clearInterval(Rt),Rt=null),jt&&((async()=>(dt=await Qt(),await bt(!1)))(),Rt=setInterval(cs,12e4))}let _e=!1;function ds(){_e||(_e=!0,$e(h("syFrame"),"siyuan","siyuan-assistant.html","剪藏助手"))}function us(){document.addEventListener("click",e=>{(e.target.closest?e.target.closest("#setupGo, #dbGoSetup"):null)&&ae()}),h("tabs").addEventListener("click",e=>{const n=e.target.closest(".dshell-tab");n&&(document.querySelectorAll("#tabs .dshell-tab").forEach(s=>s.classList.toggle("dshell-tabOn",s===n)),document.querySelectorAll(".lg-pane").forEach(s=>s.classList.toggle("lg-on",s.id==="pane-"+n.dataset.pane)),n.dataset.pane==="graph"&&b.loaded&&mt(),n.dataset.pane==="siyuan"&&ds(),n.dataset.pane==="db"&&(He(),setTimeout(ge,60)),n.dataset.pane==="invoice"&&invInit())}),h("btnAutoGrade")&&(h("btnAutoGrade").onclick=()=>openAutoWin());h("btnRefresh").onclick=()=>{projList=[];projGroups=[];projLoading=null;loadProjects(!0).then(function(){decorateCards();});bt(!0);try{if(window.__docRefresh)window.__docRefresh()}catch(eDocR){}};const t=h("autoSync");t&&t.addEventListener("change",()=>ls(t.checked)),h("btnTest").onclick=async()=>{ne(),h("testResult").textContent="测试中…";try{await Ve(),h("testResult").textContent="✓ 连接成功"}catch(e){h("testResult").textContent="✕ "+(e.message||e)}},h("btnLoad").onclick=async()=>{ne(),await bt(!0)},h("btnAdjust")&&(h("btnAdjust").onclick=()=>adjTodos()),h("routePhases").addEventListener("click",ln),h("routePhases").addEventListener("keydown",dn),["pointerdown","pointermove","pointerup","pointercancel"].forEach(e=>h("routePhases").addEventListener(e,un)),(function(){const e=document.getElementById("appRoot"),n=document.querySelector(".lg-tabpanes"),s=document.getElementById("headReveal");e&&n&&n.addEventListener("dblclick",t=>{const a=t.target;a&&a.closest&&a.closest('input,textarea,select,button,a,[contenteditable="true"]')||e.classList.add("lg-focus")}),s&&e&&s.addEventListener("click",()=>{e.classList.remove("lg-focus")})})(),window.addEventListener("resize",()=>{clearTimeout(window.__dbRt),window.__dbRt=setTimeout(ge,160)}),En(),rs()}function ps(){if(b.settings.token)return!1;ae();const t=h("testResult");t&&(t.innerHTML='<b style="color:#1B365D">第一次使用：请先填上面两项</b> · 思源 → 设置 → 关于 → 复制「API 令牌」，粘到下面「API 令牌」框，再点「保存并加载」。');const e=h("dbStatus");return e&&(e.textContent=""),!0}Xe(),us(),ps()||bt(!1)})();
+`),"已复制全部 "+f.list.length+" 个数据库（CSV）")}const Jt={text:1,number:1,select:1,mSelect:1,checkbox:1,date:1,url:1},Re={block:"「条目」列绑定的是真实文档，需要在思源里改",mAsset:"「文件」列要在思源里上传",relation:"关联列要在思源里选择",rollup:"汇总列由关联自动算出",template:"公式列由思源自动算",created:"创建时间自动生成",updated:"更新时间自动生成"};function V(t,e){return'<div class="db-stat"><span class="db-statL">'+t+'</span><span class="db-statV">'+e+"</span></div>"}function Qn(t,e){for(const n of t.keys){const s=et(t.keys,e,n);if(s.text)return s.text}return"(空行)"}function Zn(t){const e=[];return f.list.forEach(n=>{if(!n.rows.length)return;const s=n.rows.length;yt(n.keys,n.rows).forEach(a=>{const o=a.filled===0,r=!!(f.edit&&f.edit.avId===n.avId&&f.edit.keyId===a.key.id);o||r?e.push({db:n,key:a.key,stat:a,total:s,blank:o}):t&&a.filled<s&&e.push({db:n,key:a.key,stat:a,total:s,blank:!1})})}),e}function qe(t,e,n){return et(t.keys,n,e).text}function De(t,e){return t.type==="checkbox"?e==="✓"||e==="1"||e==="true"?"1":"":e==null?"":String(e)}function Yt(t,e){const n=[],s=f.edit&&f.edit.vals||{};return Object.keys(s).forEach(a=>{const o=t.rows.find(c=>c.id===a);if(!o)return;const r=De(e,qe(t,e,o));String(s[a])!==r&&n.push({rowId:a,raw:s[a]})}),n}function ts(t,e){const n=String(e??"");switch(t){case"text":return{type:"text",text:{content:n}};case"url":return{type:"url",url:{content:n}};case"number":{if(n.trim()==="")return{type:"number",number:{content:0,isNotEmpty:!1,format:"",formattedContent:""}};const s=Number(n);return isNaN(s)?null:{type:"number",number:{content:s,isNotEmpty:!0,format:"",formattedContent:String(s)}}}case"select":case"mSelect":{let s=n.split(/[，,;；\n]/).map(a=>a.trim()).filter(Boolean).map(a=>({content:a,color:""}));return t==="select"&&(s=s.slice(0,1)),{type:"mSelect",mSelect:s}}case"checkbox":return{type:"checkbox",checkbox:{checked:n==="1"||n==="true"||n==="✓"}};case"date":{if(n.trim()==="")return{type:"date",date:{content:0,isNotEmpty:!1,content2:0,isNotEmpty2:!1,hasEndDate:!1}};const s=new Date(n.trim()+"T00:00:00");return isNaN(s.getTime())?null:{type:"date",date:{content:s.getTime(),isNotEmpty:!0,content2:0,isNotEmpty2:!1,hasEndDate:!1,isNotTime:!0}}}default:return null}}function es(t,e){const n=!!Jt[e.type],s=Ot[e.type]||e.type||"";let a='<div class="db-edit">';if(a+='<div class="db-editHead"><span class="db-hint">填写</span><b>'+k(e.name||"(未命名列)")+'</b><span class="db-pill">'+k(s)+'</span><span class="db-hint">'+k(t.notebookName)+" › "+k((t.hpaths||[]).join(" / "))+" · 共 "+t.rows.length+' 行</span><span class="db-spacer"></span><button class="db-btn" data-act="editclose">关闭</button></div>',!n)return a+'<div class="db-empty">这一列不能在这里填写：'+k(Re[e.type]||"「"+s+"」类型需在思源里修改")+"。</div></div>";if(e.type==="checkbox")a+='<div class="db-editBatch"><button class="db-btn" data-act="all1">全部勾选</button><button class="db-btn" data-act="all0">全部取消</button><span class="db-hint">也可以逐行勾选</span></div>';else{const m=e.type==="date"?' type="date"':e.type==="number"?' type="number" step="any"':"";a+='<div class="db-editBatch"><span class="db-hint">统一值</span><input class="db-inp" data-batch="1"'+m+' placeholder="输入后点右侧按钮，填到所有行" /><button class="db-btn" data-act="fillall">填充到全部行</button><button class="db-btn" data-act="clearall">清空填写</button>'+(e.type==="select"||e.type==="mSelect"?'<span class="db-hint">多选值用「,」分隔</span>':"")+"</div>"}const o="dbdl-"+e.id,r=(e.options||[]).map(m=>m.name||m.content||"").filter(Boolean),c=300,i=t.rows.slice(0,c),l=f.edit&&f.edit.vals||{};a+='<div class="db-editRows">',i.forEach(m=>{const S=qe(t,e,m),w=k(Qn(t,m));if(e.type==="checkbox"){const p=(l[m.id]!==void 0?l[m.id]:De(e,S))==="1";a+='<label class="db-editRow"><input type="checkbox" data-row="'+k(m.id)+'"'+(p?" checked":"")+' /><span class="db-editLabel" title="'+w+'">'+w+"</span></label>"}else if(e.type==="date"){const p=l[m.id]!==void 0?l[m.id]:S;a+='<label class="db-editRow"><span class="db-editLabel" title="'+w+'">'+w+'</span><input class="db-inp" type="date" data-row="'+k(m.id)+'" value="'+k(p)+'" /></label>'}else{const p=l[m.id]!==void 0?l[m.id]:S,y=e.type==="number"?' type="number" step="any"':r.length?' list="'+o+'"':"";a+='<label class="db-editRow"><span class="db-editLabel" title="'+w+'">'+w+'</span><input class="db-inp" data-row="'+k(m.id)+'" value="'+k(p)+'"'+y+" /></label>"}}),a+="</div>",r.length&&(a+='<datalist id="'+o+'">'+r.map(m=>'<option value="'+k(m)+'"></option>').join("")+"</datalist>"),t.rows.length>c&&(a+='<div class="db-hint">只显示前 '+c+" 行（共 "+t.rows.length+" 行）</div>");const d=Yt(t,e).length,u=!!(f.edit&&f.edit.armed);return a+='<div class="db-editFoot"><button class="db-btn db-save" data-act="save">'+(u?"确认写入 "+d+" 项":d?"写入思源（"+d+" 项改动）":"写入思源")+'</button><span class="db-editMsg">'+(u?"再次点击才会真正写入思源":"只写入你改动过的单元格；留空表示不填")+"</span></div>",a+"</div>"}function st(){const t=h("dbList");if(!t)return;if(f.focus&&(f.focus=null,xt(t)),!f.list.length){h("dbStats").innerHTML="",t.innerHTML='<div class="db-empty">还没有读到数据库，请先确认思源已启动。</div>';return}const e=!!(h("dbBlankPartial")&&h("dbBlankPartial").checked),n=z(h("dbSearch")?h("dbSearch").value:""),s=Zn(e).filter(c=>!n||z(c.key.name+" "+c.db.name+" "+c.db.notebookName+" "+(c.db.hpaths||[]).join(" ")).includes(n));if(h("dbStats").innerHTML=V("空白字段",s.length)+V("完全空白",s.filter(c=>c.blank).length)+V("涉及数据库",new Set(s.map(c=>c.db.avId)).size)+V("可直接写入",s.filter(c=>Jt[c.key.type]).length),!s.length){t.innerHTML='<div class="db-empty">没有空白字段'+(e?"":"——可以勾选上面的「含部分空白」看看填了一部分的列")+"。</div>";return}const a=new Map;Wt(),s.forEach(c=>{const i=c.db.notebookName||"未分类";a.has(i)||a.set(i,new Map);const l=a.get(i);l.has(c.db.avId)||l.set(c.db.avId,{db:c.db,items:[]}),l.get(c.db.avId).items.push(c)});const o=c=>Array.from(c.values()).reduce((i,l)=>i+l.db.rows.length,0),r=Array.from(a.entries()).sort((c,i)=>o(i[1])-o(c[1]));t.innerHTML=r.map(([c,i])=>{const l=Array.from(i.values()).sort((S,w)=>w.db.rows.length-S.db.rows.length),d=l.reduce((S,w)=>S+w.items.length,0),u=ve(c);let m='<div class="db-grp" style="border-left-color:'+u+";background:"+we(u,.05)+'"><div class="db-nb"><span class="db-nbDot" style="background:'+u+'"></span><span class="db-nbN" style="color:'+u+'">'+k(c)+'</span><span class="db-nbS">'+d+" 个空白字段 · "+l.length+" 个数据库</span></div>";return l.forEach(({db:S,items:w})=>{m+='<div class="db-card" data-avid="'+k(S.avId)+'" style="border-left:3px solid '+u+'"><div class="db-cHead"><span class="db-name">'+k(S.name)+'</span><span class="db-meta">'+k((S.hpaths||[]).join(" / "))+" · "+S.rows.length+" 行 × "+S.keys.length+' 列</span><a class="db-btn" href="siyuan://blocks/'+k(S.blockId)+'" data-act="jump" title="在思源笔记里打开这个数据库">↗ 在思源打开</a></div>',w.forEach(p=>{const y=!!Jt[p.key.type];m+='<div class="db-bf"><span class="db-bfName">'+k(p.key.name||"(未命名列)")+'</span><span class="db-pill">'+k(Ot[p.key.type]||p.key.type||"")+'</span><span class="db-bfCnt">已填 <b>'+p.stat.filled+"</b> / "+p.total+(p.blank?"（完全空白）":"")+'</span><span class="db-spacer"></span>'+(y?'<button class="db-btn" data-act="edit" data-avid="'+k(S.avId)+'" data-keyid="'+k(p.key.id)+'">填写</button>':'<span class="db-hint" title="'+k(Re[p.key.type]||"")+'">不可直接填写</span>')+"</div>",f.edit&&f.edit.avId===S.avId&&f.edit.keyId===p.key.id&&(m+=es(S,p.key))}),m+="</div>"}),m+"</div>"}).join("")}function ns(t,e){f.edit&&f.edit.avId===t&&f.edit.keyId===e?f.edit=null:f.edit={avId:t,keyId:e,vals:{},armed:!1},st()}async function ss(t){const e=await _("/api/av/getAttributeView",{id:t.avId}),n=e&&e.av;n&&(t.keys=(n.keyValues||[]).map(s=>s.key).filter(s=>s&&s.id),t.rows=me(n))}async function as(t,e){const n=Yt(t,e);if(!n.length){M("没有需要写入的改动");return}if(!f.edit.armed){f.edit.armed=!0,st();return}const s=h("dbStatus");let a=0,o=0,r="";for(const c of n){const i=ts(e.type,c.raw);if(!i){o++,r=r||"无法识别的值："+c.raw;continue}try{await _("/api/av/setAttributeViewBlockAttr",{avID:t.avId,keyID:e.id,itemID:c.rowId,value:i}),a++}catch(l){o++,r=r||l.message||String(l)}s&&(s.textContent="正在写入 "+t.notebookName+" · "+t.name+" ："+(a+o)+" / "+n.length+" …")}try{await ss(t)}catch{}f.edit.armed=!1,f.edit.vals={},st(),M("写入完成：成功 "+a+" 项"+(o?" · 失败 "+o+" 项（"+r+"）":"")+" · 已重新读取该库")}function os(){const t=h("dbList");if(!t||!f.edit)return;const e=f.list.find(r=>r.avId===f.edit.avId);if(!e)return;const n=e.keys.find(r=>r.id===f.edit.keyId);if(!n)return;const s=Yt(e,n).length,a=t.querySelector('.db-edit [data-act="save"]'),o=t.querySelector(".db-edit .db-editMsg");a&&(a.textContent=f.edit.armed?"确认写入 "+s+" 项":s?"写入思源（"+s+" 项改动）":"写入思源"),o&&(o.textContent=f.edit.armed?"再次点击才会真正写入思源":"只写入你改动过的单元格；留空表示不填")}function Fe(){const t=f.edit;if(!t)return null;const e=f.list.find(s=>s.avId===t.avId);if(!e)return null;const n=e.keys.find(s=>s.id===t.keyId);return n?{db:e,key:n}:null}function rs(){const t=h("dbList");if(!t)return;t.addEventListener("click",l=>{const d=l.target.closest("[data-act]");if(!d)return;const u=d.dataset.act;if(u==="edit"){ns(d.dataset.avid,d.dataset.keyid);return}if(u==="ai"){const w=d.closest(".db-card"),p=w?f.list.find(y=>y.avId===w.dataset.avid):null;p&&Hn(p,!0);return}if(u==="editclose"){f.edit=null,st();return}if(u==="save"){const w=Fe();w&&as(w.db,w.key);return}if(u==="all1"||u==="all0"||u==="fillall"||u==="clearall"){const w=Fe();if(!w)return;const p=f.edit;if(u==="clearall")p.vals={};else if(u==="all1"||u==="all0")w.db.rows.forEach(y=>{p.vals[y.id]=u==="all1"?"1":""});else{const y=t.querySelector(".db-edit .db-editBatch .db-inp"),g=y?y.value:"";w.db.rows.forEach(x=>{p.vals[x.id]=g})}p.armed=!1,st();return}const m=d.closest(".db-card"),S=m?f.list.find(w=>w.avId===m.dataset.avid):null;if(S){if(u==="jump"){l.preventDefault(),$n(S);return}if(u==="toggle"){const w=m.querySelector(".db-body");if(w.style.display!=="none"){if(w.style.display="none",d.textContent="展开数据",d.classList.remove("db-on"),f.focus===m.dataset.avid){f.focus=null;const y=h("dbList");y&&(xt(y),Ct())}}else f.focus=m.dataset.avid,be(h("dbList"));return}if(u==="meta"){const w=m.classList.toggle("db-metaOff");d.classList.toggle("db-on",!w),d.textContent=w?"显示统计":"收起统计",requestAnimationFrame(()=>Ut(m,h("dbList")));return}if(u==="csv"){je(Ne(S),"已复制「"+S.name+"」的 CSV（"+S.rows.length+" 行）");return}if(u==="xlsx"){Jn(S);return}}});const e=l=>{const d=l.target;!d||!d.dataset||!d.dataset.row||!f.edit||(f.edit.vals[d.dataset.row]=d.type==="checkbox"?d.checked?"1":"":d.value,f.edit.armed&&(f.edit.armed=!1),os())};t.addEventListener("input",e),t.addEventListener("change",e);const n=h("dbViewSeg");n&&n.addEventListener("click",l=>{const d=l.target.closest("[data-dbview]");if(!d)return;n.querySelectorAll(".db-segBtn").forEach(m=>m.classList.toggle("db-segOn",m===d)),f.view=d.dataset.dbview,f.edit=null;const u=h("dbPartialWrap");u&&(u.style.display=f.view==="blank"?"inline-flex":"none"),Ct()});const s=h("dbBlankPartial");s&&s.addEventListener("change",()=>{f.edit=null,st()});const a=h("dbSearch");a&&a.addEventListener("input",()=>Ct());const o=h("dbRefresh");o&&o.addEventListener("click",()=>{f.loaded=!1,He(!0)});const r=h("dbOpenAll");r&&r.addEventListener("click",Yn);const c=h("dbXlsx");c&&c.addEventListener("click",Vn);const i=h("dbAiAll");i&&i.addEventListener("click",Pn)}async function He(t){if(f.loading||f.loaded&&!t)return;f.loading=!0;const e=h("dbStatus"),n=h("dbList");e&&(e.textContent="正在读取思源数据库…"),n&&(n.innerHTML='<div class="db-empty"><span class="lg-loading"></span> 正在读取思源里的「数据库」…</div>');try{const s={};try{const d=await _("/api/notebook/lsNotebooks",{});(d&&d.notebooks||[]).forEach(u=>{u&&u.id&&(s[u.id]=(u.name||"").trim()||"未命名笔记本")})}catch{}const a=await ht("SELECT id, box, hpath, updated FROM blocks WHERE type='av'"),o=new Map;for(const d of a){let u="";try{const p=await _("/api/block/getBlockKramdown",{id:d.id});u=p&&p.kramdown||""}catch{continue}const m=u.match(/data-av-id="([^"]+)"/);if(!m)continue;const S=m[1];let w=o.get(S);w||(w={avId:S,blockId:d.id,box:d.box,notebookName:s[d.box]||"未分类笔记",hpaths:[],updated:Number(d.updated)||0,name:"",keys:[],rows:[]},o.set(S,w)),d.hpath&&w.hpaths.indexOf(d.hpath)<0&&w.hpaths.push(d.hpath)}const r=Array.from(o.values());let c=0,i=0;for(const d of r){c++,e&&(e.textContent="正在读取数据库数据 "+c+" / "+r.length+"（"+d.hpaths[0]+"）…");let u=null;try{const m=await _("/api/av/getAttributeView",{id:d.avId});u=m&&m.av}catch{u=null}if(!u){d.broken=!0,i++;continue}d.name=(u.name||"").trim()||(d.hpaths[0]||"").split("/").filter(Boolean).pop()||"未命名数据库",d.keys=(u.keyValues||[]).map(m=>m.key).filter(m=>m&&m.id),d.rows=me(u)}f.list=r.filter(d=>!d.broken),f.loaded=!0,Ct();const l=f.list.reduce((d,u)=>d+u.rows.length,0);e&&(e.textContent="✓ 已汇总 "+f.list.length+" 个数据库 · "+l+" 行数据"+(i?" · "+i+" 个读取失败":"")+" · "+new Date().toLocaleTimeString())}catch(s){n&&(n.innerHTML=b.settings.token?'<div class="db-empty">读取失败：'+k(s.message||s)+"<br>请在「设置」中确认思源 API 地址与令牌（当前 "+k(b.settings.base||"")+"）。</div>":'<div class="db-empty">还没连上思源 —— 请先到「设置」页填一次 API 令牌，回来点「刷新数据」即可。<br><button class="db-btn" id="dbGoSetup" style="margin-top:8px">去填写 →</button></div>'),e&&(e.textContent="✕ "+(s.message||s))}finally{f.loading=!1}}function Pe(t,e){return`<html><body style='margin:0;background:#f6f4ec;color:#7a746a;font:13px/1.75 "Microsoft YaHei",system-ui,sans-serif;padding:30px'><div style='font-size:15px;font-weight:600;color:#1B365D;margin-bottom:8px'>`+t+" · 可选模块，本次未加载</div><div>这个页签需要一份 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"+e+"</code>，启用两步：</div><div style='margin-top:8px'>① 把 "+e+" 放进<b>本文件所在的同一个文件夹</b>；</div><div>② 用记事本打开本文件，找到顶部的 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>window.DSW_CONFIG.subPages</code>，把 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"+e.replace(/\.html$/,"")+`</code> 那一项改成 <code style='background:#efe8d8;padding:1px 5px;border-radius:4px'>"`+e+'"</code>（也可以填完整路径），保存后刷新本页。</div></body></html>'}function $e(t,e,n,s){if(!t)return;t.style.flex="1 1 0",t.style.minHeight="0";const a=Ke[e];if(a&&ee){fetch(ee+encodeURIComponent(a)).then(o=>{if(!o.ok)throw new Error("HTTP "+o.status);return o.text()}).then(o=>{t.srcdoc=o}).catch(o=>{t.srcdoc=Pe(s+"（读取失败："+String(o&&o.message||o)+"）",n)});return}if(a){t.src=a;return}t.srcdoc=Pe(s,n)}function is(){/* 周报已并入工作规划页的子视图，原 iframe 方案（wkFrame）作废，这里保留空实现以防旧引用报错 */}let jt=!1,Rt=null,dt="0";async function Qt(){try{const t=await _("/api/query/sql",{stmt:"SELECT max(updated) AS m FROM blocks"});return t&&t[0]&&String(t[0].m)||dt}catch{return dt}}async function cs(){if(!jt||b.loading)return;const t=await Qt();t&&t!==dt&&(dt=t,await bt(!1))}function ls(t){jt=!!t;const e=h("autoSync");e&&(e.checked=jt),Rt&&(clearInterval(Rt),Rt=null),jt&&((async()=>(dt=await Qt(),await bt(!1)))(),Rt=setInterval(cs,12e4))}let _e=!1;function ds(){_e||(_e=!0,$e(h("syFrame"),"siyuan","siyuan-assistant.html","剪藏助手"))}function us(){document.addEventListener("click",e=>{(e.target.closest?e.target.closest("#setupGo, #dbGoSetup"):null)&&ae()}),h("tabs").addEventListener("click",e=>{const n=e.target.closest(".dshell-tab");n&&(document.querySelectorAll("#tabs .dshell-tab").forEach(s=>s.classList.toggle("dshell-tabOn",s===n)),document.querySelectorAll(".lg-pane").forEach(s=>s.classList.toggle("lg-on",s.id==="pane-"+n.dataset.pane)),n.dataset.pane==="graph"&&b.loaded&&mt(),n.dataset.pane==="siyuan"&&ds(),n.dataset.pane==="db"&&(He(),setTimeout(ge,60)),n.dataset.pane==="invoice"&&invInit())}),h("btnAutoGrade")&&(h("btnAutoGrade").onclick=()=>openAutoWin());h("btnRefresh").onclick=()=>{projList=[];projGroups=[];projLoading=null;loadProjects(!0).then(function(){decorateCards();});bt(!0);try{if(window.__docRefresh)window.__docRefresh()}catch(eDocR){}};const t=h("autoSync");t&&t.addEventListener("change",()=>ls(t.checked)),h("btnTest").onclick=async()=>{ne(),h("testResult").textContent="测试中…";try{await Ve(),h("testResult").textContent="✓ 连接成功"}catch(e){h("testResult").textContent="✕ "+(e.message||e)}},/* 填完就存：思源连接和 AI 引擎的所有输入框，   停止输入 600ms 或失焦时自动调用 ne()（原本是保存按钮做的事）。   不再需要「保存并加载」按钮 —— 加载由测试连接和进页面时完成。 */(function(){  var ids=["apiBase","apiToken","aiBase","aiModel","aiKey"];  var timers={};  ids.forEach(function(id){    var el=h(id); if(!el) return;    timers[id]=null;    function go(){      if(timers[id]){clearTimeout(timers[id]);timers[id]=null;}      try{ ne(); h("testResult").textContent="已保存"; }catch(e){}    }    el.addEventListener("input",function(){      if(timers[id])clearTimeout(timers[id]);      timers[id]=setTimeout(go,600);    });    el.addEventListener("blur",go);  });})(),h("btnAdjust")&&(h("btnAdjust").onclick=()=>adjTodos()),h("routePhases").addEventListener("click",ln),h("routePhases").addEventListener("keydown",dn),["pointerdown","pointermove","pointerup","pointercancel"].forEach(e=>h("routePhases").addEventListener(e,un)),(function(){const e=document.getElementById("appRoot"),n=document.querySelector(".lg-tabpanes"),s=document.getElementById("headReveal");e&&n&&n.addEventListener("dblclick",t=>{const a=t.target;a&&a.closest&&a.closest('input,textarea,select,button,a,[contenteditable="true"]')||e.classList.add("lg-focus")}),s&&e&&s.addEventListener("click",()=>{e.classList.remove("lg-focus")})})(),window.addEventListener("resize",()=>{clearTimeout(window.__dbRt),window.__dbRt=setTimeout(ge,160)}),En(),rs()}function ps(){if(b.settings.token)return!1;ae();const t=h("testResult");t&&(t.innerHTML='<b style="color:#1B365D">第一次使用：请先填上面两项</b> · 思源 → 设置 → 关于 → 复制「API 令牌」，粘到下面「API 令牌」框，再点「保存并加载」。');const e=h("dbStatus");return e&&(e.textContent=""),!0}Xe(),us(),ps()||bt(!1)})();
 </script>
 <script>
 /* ---------- 工作规划页的子页签：今日待办 / 周报总结 / 历史记录 ---------- */
@@ -8062,7 +8110,7 @@ async function gradeAI(){
   /* ---------- 周报数据源：存 localStorage 并同步给 3918（番茄钟周报也用它） ---------- */
   var wsBaseEl = document.getElementById("wsBase");
   var wsTokenEl = document.getElementById("wsToken");
-  var wsSaveEl = document.getElementById("wsSave");
+
   var wsResultEl = document.getElementById("wsResult");
 
   function cfgSave(patch){
@@ -8084,32 +8132,65 @@ async function gradeAI(){
   if (wsResultEl && cfg().wsBase) wsResultEl.textContent = "当前：" + cfg().wsBase;
   if (cfg().wsBase) syncWs(cfg()).catch(function(){});
 
-  if (wsSaveEl) wsSaveEl.addEventListener("click", function(ev){
-    ev.preventDefault();
+  /* 保存周报配置（不发请求，纯存） */
+  function saveWs(){
     var api = (wsBaseEl.value || "").trim();
     var tk  = (wsTokenEl.value || "").trim();
-    if (api && !/^https?:\/\//i.test(api)) { wsResultEl.textContent = "地址要以 http:// 或 https:// 开头"; return; }
-    wsSaveEl.disabled = true;
-    wsResultEl.textContent = "保存中…";
-    var c = cfgSave({ wsBase: api, wsToken: tk });
-    syncWs(c).then(function(j){
+    if (api && !/^https?:\/\//i.test(api)) {
+      wsResultEl.textContent = "地址要以 http:// 或 https:// 开头";
+      return false;
+    }
+    var cf = cfgSave({ wsBase: api, wsToken: tk });
+    syncWs(cf).then(function(j){
       if (!j || !j.ok) throw new Error((j && j.error) || "配置写入失败");
-      wsResultEl.textContent = "已保存，测试连通性…";
-      return fetch("http://127.0.0.1:3918/probe").then(function(r){ return r.json(); });
-    }).then(function(p){
-      if (p && p.ok) {
-        wsResultEl.textContent = "✓ 已连接 " + p.api + (p.version ? "（v" + p.version + "）" : "");
-      } else {
-        wsResultEl.textContent = "✕ 连接失败：" + ((p && (p.error || p.body)) || "未知");
-      }
+      wsResultEl.textContent = "已保存" + (api ? "：" + api : "（已清空）");
     }).catch(function(e){
-      wsResultEl.textContent = "✕ " + ((e && e.message) || e);
-    }).then(function(){ wsSaveEl.disabled = false; });
+      wsResultEl.textContent = "✕ 保存失败：" + ((e && e.message) || e);
+    });
+    return true;
+  }
+
+  /* 填写即保存 */
+  autoSave([wsBaseEl, wsTokenEl], saveWs);
+
+  /* 只剩一个「测试连接」按钮 */
+  var wsTestEl = document.getElementById("wsTest");
+  if (wsTestEl) wsTestEl.addEventListener("click", function(ev){
+    ev.preventDefault();
+    wsResultEl.textContent = "测试中…";
+    wsTestEl.disabled = true;
+    /* 先把当前填的值写进服务，再探它的 /health ——
+       这样测的是"你刚填的地址"，不是服务里残留的旧配置。 */
+    var api = (wsBaseEl.value || "").trim();
+    var tk  = (wsTokenEl.value || "").trim();
+    fetch("http://127.0.0.1:3918/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api: api, token: tk })
+    }).catch(function(){
+      /* 配置写不进去也继续测，服务可能本来就在跑 */
+    })
+      .then(function(){ return fetch("http://127.0.0.1:3918/health"); })
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(h){
+        var target = h.api || api || "（未填地址）";
+        var parts = [];
+        if (h.ok) parts.push("✓ 思源已连通 " + target);
+        else parts.push("✕ 思源连不上 " + target);
+        if (h.version) parts.push("v" + h.version);
+        wsResultEl.textContent = parts.join(" · ");
+      })
+      .catch(function(e){
+        wsResultEl.textContent = "✕ 周报服务不可达（127.0.0.1:3918）：" + ((e && e.message) || e);
+      })
+      .then(function(){ wsTestEl.disabled = false; });
   });
 
   /* ---- 拓展服务：发票解析地址 ---- */
   var svcInvoiceEl = document.getElementById("svcInvoice");
-  var svcSaveEl    = document.getElementById("svcSave");
   var svcResultEl  = document.getElementById("svcResult");
   function invCfg(){
     try { return JSON.parse(localStorage.getItem("dsh.worktable.invoice.v1") || "{}"); } catch(e){ return {}; }
@@ -8117,17 +8198,30 @@ async function gradeAI(){
   if (svcInvoiceEl) svcInvoiceEl.value = invCfg().base || "";
   if (svcResultEl && invCfg().base) svcResultEl.textContent = "当前：" + invCfg().base;
 
-  if (svcSaveEl) svcSaveEl.addEventListener("click", function(ev){
-    ev.preventDefault();
+  /* 保存发票解析地址（纯存，不发请求） */
+  function saveSvc(){
     var api = (svcInvoiceEl.value || "").trim().replace(/\/+$/, "");
-    if (api && !/^https?:\/\//i.test(api)) { svcResultEl.textContent = "地址要以 http:// 或 https:// 开头"; return; }
+    if (api && !/^https?:\/\//i.test(api)) {
+      svcResultEl.textContent = "地址要以 http:// 或 https:// 开头";
+      return false;
+    }
     try {
       if (api) localStorage.setItem("dsh.worktable.invoice.v1", JSON.stringify({ base: api }));
       else localStorage.removeItem("dsh.worktable.invoice.v1");
     } catch(e) {}
+    svcResultEl.textContent = "已保存" + (api ? "：" + api : "（用默认 " + INV_PARSER_DEFAULT + "）");
+    return true;
+  }
+
+  autoSave([svcInvoiceEl], saveSvc);
+
+  var svcTestEl = document.getElementById("svcTest");
+  if (svcTestEl) svcTestEl.addEventListener("click", function(ev){
+    ev.preventDefault();
+    var api = (svcInvoiceEl.value || "").trim().replace(/\/+$/, "");
     var target = api || INV_PARSER_DEFAULT;
-    svcSaveEl.disabled = true;
-    svcResultEl.textContent = "已保存，测试连通性…";
+    svcResultEl.textContent = "测试中…";
+    svcTestEl.disabled = true;
     fetch(target + "/health")
       .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function(j){
@@ -8136,12 +8230,11 @@ async function gradeAI(){
       .catch(function(e){
         svcResultEl.textContent = "✕ 连不上 " + target + "（" + ((e && e.message) || e) + "）";
       })
-      .then(function(){ svcSaveEl.disabled = false; });
+      .then(function(){ svcTestEl.disabled = false; });
   });
 
   /* ---- 侧边栏：全局快捷键 + 占住屏幕边缘 ---- */
   var hkInput  = document.getElementById("hkInput");
-  var hkSave   = document.getElementById("hkSave");
   var hkResult = document.getElementById("hkResult");
   var appbarChk= document.getElementById("appbarChk");
 
@@ -8217,6 +8310,117 @@ async function gradeAI(){
     rightClickChk.checked = localStorage.getItem("dsh.worktable.rightClick.v1") === "1";
   } catch(e){}
 
+  /* ---------- 填写即保存 ----------
+     设置项不再需要「保存」按钮：输入停下 600ms 就自动存。
+     密码框也照样存 —— 反正只在本机。
+     返回 false 表示这次不该存（比如地址格式不对），调用方自己提示。 */
+  function autoSave(inputs, doSave, opts){
+    opts = opts || {};
+    var delay = opts.delay || 600;
+    var timers = [];
+    inputs.forEach(function(el, i){
+      if (!el) return;
+      timers[i] = null;
+      function schedule(){
+        if (timers[i]) clearTimeout(timers[i]);
+        timers[i] = setTimeout(function(){
+          timers[i] = null;
+          try { doSave(); } catch(e){}
+        }, delay);
+      }
+      el.addEventListener("input", schedule);
+      /* 失焦时立刻存一次，不用等防抖 */
+      el.addEventListener("blur", function(){
+        if (timers[i]) { clearTimeout(timers[i]); timers[i] = null; }
+        try { doSave(); } catch(e){}
+      });
+    });
+  }
+
+  /* ---------- 同步：自动推送 / 定时拉取 ---------- */
+  (function(){
+    var K = "dsh.worktable.sync.v1";
+    var chkPush  = document.getElementById("syncAutoPush");
+    var chkPull  = document.getElementById("syncAutoPull");
+    var selLocal = document.getElementById("syncLocalEvery");
+    var selCloud = document.getElementById("syncCloudEvery");
+    var stateEl  = document.getElementById("syncState");
+    var resEl    = document.getElementById("syncResult");
+    if (!chkPush) return;
+
+    /* 默认：推送开、拉取开、本地 1 分钟、云端 5 分钟 */
+    function load(){
+      var d = { autoPush: true, autoPull: true, localEvery: 60, cloudEvery: 300 };
+      try {
+        var o = JSON.parse(localStorage.getItem(K) || "{}");
+        if (typeof o.autoPush === "boolean")  d.autoPush  = o.autoPush;
+        if (typeof o.autoPull === "boolean")  d.autoPull  = o.autoPull;
+        if (+o.localEvery > 0) d.localEvery = +o.localEvery;
+        if (+o.cloudEvery > 0) d.cloudEvery = +o.cloudEvery;
+      } catch(e){}
+      return d;
+    }
+
+    function fmt(n){
+      n = +n || 0;
+      return n >= 60 ? (n % 60 === 0 ? (n / 60) + " 分钟" : n + " 秒") : n + " 秒";
+    }
+
+    function paint(){
+      var s = load();
+      chkPush.checked = s.autoPush;
+      chkPull.checked = s.autoPull;
+      selLocal.value = String(s.localEvery);
+      selCloud.value = String(s.cloudEvery);
+      selLocal.disabled = !s.autoPull;
+      selCloud.disabled = !s.autoPull;
+      stateEl.textContent =
+        (s.autoPush ? "改动后自动推送" : "推送已关（只能手动推）") + " · " +
+        (s.autoPull ? "拉取：本地每 " + fmt(s.localEvery) + "、云端每 " + fmt(s.cloudEvery) : "不自动拉取");
+    }
+
+    /* 侧边栏监听这个键的 storage 事件来重设定时器 */
+    function save(){
+      var s = {
+        autoPush: !!chkPush.checked,
+        autoPull: !!chkPull.checked,
+        localEvery: +selLocal.value || 60,
+        cloudEvery: +selCloud.value || 300
+      };
+      try { localStorage.setItem(K, JSON.stringify(s)); } catch(e){}
+      /* 同步和老的 pausePush 保持一致：关掉自动推送 == 暂停推送 */
+      try { localStorage.setItem("dsh.worktable.pausePush", s.autoPush ? "0" : "1"); } catch(e){}
+      paint();
+      resEl.style.color = "";
+      resEl.textContent = "已保存";
+      setTimeout(function(){ if (resEl.textContent === "已保存") resEl.textContent = ""; }, 1600);
+    }
+
+    [chkPush, chkPull, selLocal, selCloud].forEach(function(el){
+      if (el) el.addEventListener("change", save);
+    });
+
+    var btn = document.getElementById("syncPullNow");
+    if (btn) btn.addEventListener("click", function(ev){
+      ev.preventDefault();
+      btn.disabled = true;
+      resEl.style.color = "";
+      resEl.textContent = "拉取中…";
+      /* 让侧边栏去拉：它才有思源配置和快照读写 */
+      try {
+        localStorage.setItem("dsh.worktable.pullCmd.v1", String(Date.now()));
+        resEl.textContent = "已通知侧边栏拉取，看侧边栏底部的提示";
+        resEl.style.color = "#2f7a4f";
+      } catch(e) {
+        resEl.textContent = "✕ " + (e.message || e);
+        resEl.style.color = "#b4453a";
+      }
+      setTimeout(function(){ btn.disabled = false; }, 1500);
+    });
+
+    paint();
+  })();
+
   /* ---------- 本地数据库：显示信息 + 备份 ---------- */
   (function(){
     var pathEl = document.getElementById("kvPath");
@@ -8234,9 +8438,9 @@ async function gradeAI(){
 
     function refresh(){
       invoke("kv_info").then(function(i){
-        pathEl.value = i.path || "—";
+        pathEl.value = i.dir || "—";
         statEl.textContent = i.keys + " 个键 · 数据 " + fmtBytes(i.dataBytes) +
-          " · 文件 " + fmtBytes(i.fileBytes);
+          " · 目录共 " + fmtBytes(i.dirBytes);
         return invoke("kv_backup_list");
       }).then(function(list){
         if (!list || !list.length) return;
@@ -8269,48 +8473,54 @@ async function gradeAI(){
     refresh();
   })();
 
-  if (hkSave) hkSave.addEventListener("click", function(ev){
-    ev.preventDefault();
-    var tasks = [];
-    if (hkPending) {
-      tasks.push(invoke("set_hotkey", { mods: hkPending.mods, vk: hkPending.vk })
-        .then(function(r){
-          var s = String(r || "");
-          if (s.indexOf("ok:") === 0) {
-            hkInput.value = s.slice(3);
-            hkPending = null;
-            hkResult.textContent = "✓ 快捷键已改为 " + hkInput.value;
-            /* 通知侧边栏：它底部写着当前快捷键，要跟着变 */
-            try { localStorage.setItem("dsh.worktable.hotkey.v1", hkInput.value); } catch(e){}
-            /* 快捷键一览里的第一行也要刷新 */
-            try { hkInput.dispatchEvent(new Event("hk-changed")); } catch(e){}
-          } else {
-            hkResult.textContent = "✕ " + s.replace(/^\w+:/, "");
-          }
-        }));
-    }
-    var wantOn = !!appbarChk.checked;
-    tasks.push(invoke("appbar_set", { on: wantOn }).then(function(){
-      try { localStorage.setItem("dsh.worktable.appbar.v1", wantOn ? "1" : "0"); } catch(e){}
-      if (!hkPending) hkResult.textContent = "✓ 已保存" + (wantOn ? "，「占住屏幕边缘」已开启" : "，「占住屏幕边缘」已关闭");
-    }).catch(function(e){
-      hkResult.textContent = "✕ " + ((e && e.message) || e);
-    }));
+  /* ---- 设置项全部改为"变动即保存"，不再有保存按钮 ---- */
 
-    /* 右键开关：写进共享存储，两个窗口各自读 */
+  /* 1) 占住屏幕边缘：勾选就生效并落盘 */
+  function applyAppbar(){
+    var wantOn = !!appbarChk.checked;
+    invoke("appbar_set", { on: wantOn }).then(function(){
+      try { localStorage.setItem("dsh.worktable.appbar.v1", wantOn ? "1" : "0"); } catch(e){}
+      if (hkResult) hkResult.textContent = wantOn ? "✓ 已开启占位" : "✓ 已关闭占位";
+    }).catch(function(e){
+      if (hkResult) hkResult.textContent = "✕ " + ((e && e.message) || e);
+    });
+  }
+
+  /* 2) 右键开关：写进共享存储，两个窗口各自读 */
+  function applyRightClick(){
     try {
       var rc = rightClickChk.checked ? "1" : "0";
       localStorage.setItem("dsh.worktable.rightClick.v1", rc);
-      /* 让本窗口自己立刻生效（storage 事件不会回调自己） */
       document.dispatchEvent(new CustomEvent("rightclick-change", { detail: rc === "1" }));
+      if (hkResult) hkResult.textContent = rc === "1" ? "✓ 已启用右键" : "✓ 已关闭右键";
     } catch(e){}
+  }
 
-    Promise.all(tasks).catch(function(e){
-      hkResult.textContent = "✕ " + ((e && e.message) || e);
+  if (appbarChk) appbarChk.addEventListener("change", applyAppbar);
+  if (rightClickChk) rightClickChk.addEventListener("change", applyRightClick);
+
+  /* 3) 快捷键：按下组合键就立刻注册并保存，不再点保存按钮 */
+  if (hkInput) {
+    var _oldKeydown = hkInput.onkeydown;
+    hkInput.addEventListener("keydown", function(ev){
+      if (!hkPending) return;
+      var mods = hkPending.mods, vk = hkPending.vk;
+      hkPending = null;
+      invoke("set_hotkey", { mods: mods, vk: vk }).then(function(r){
+        var s = String(r || "");
+        if (s.indexOf("ok:") === 0) {
+          hkInput.value = s.slice(3);
+          hkResult.textContent = "✓ 快捷键已改为 " + hkInput.value;
+          try { localStorage.setItem("dsh.worktable.hotkey.v1", hkInput.value); } catch(e){}
+          try { hkInput.dispatchEvent(new Event("hk-changed")); } catch(e){}
+        } else {
+          hkResult.textContent = "✕ " + s.replace(/^\w+:/, "");
+        }
+      });
     });
-  });
+  }
 
-  /* 启动时按上次的设置恢复占位状态 */
+  /* 启动时按上次的设置恢复占位状态 */  /* 启动时按上次的设置恢复占位状态 */
   try {
     if (localStorage.getItem("dsh.worktable.appbar.v1") === "1") {
       setTimeout(function(){ invoke("appbar_set", { on: true }).catch(function(){}); }, 2500);

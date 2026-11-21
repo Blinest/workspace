@@ -5230,7 +5230,17 @@
     }
     /* 紧急开关：维护数据时可以让后台推送静默（不写本地/云端文档）。
        在控制台执行 __pausePush(true) 打开，__pausePush(false) 关闭。 */
+    /* 自动推送开关：主窗口「设置 → 同步 → 改动后自动推送」。
+       关掉时连手动点 ↑ 也照常可用（silent=false 的调用不受影响），
+       这里只拦后台静默推送。 */
+    var _autoPushOn = true;
+    try {
+      var _sy = JSON.parse(localStorage.getItem("dsh.worktable.sync.v1") || "{}");
+      if (typeof _sy.autoPush === "boolean") _autoPushOn = _sy.autoPush;
+    } catch(eS){}
+    /* 维护开关：pausePush 优先级最高，其次才是设置里的自动推送 */
     try { if (localStorage.getItem("dsh.worktable.pausePush") === "1") return Promise.resolve(); } catch(eP){}
+    if (silent && !_autoPushOn) return Promise.resolve();
     if (silent && !_urgent && Date.now() - lastPushDoneAt < PUSH_MIN_GAP) return Promise.resolve();
     var raw = readSnapshot();
     if (!raw || !raw.items || !raw.items.length) { todoHint("还没有待办可推送"); return Promise.resolve(); }
@@ -7120,10 +7130,58 @@
   }
   window.__pollStat = function(){ return pollStat; };
 
-  setInterval(syncLocalOnly, LOCAL_POLL_MS);
+  /* ---- 同步频率设置（主窗口「设置 → 同步」）---- */
+  function syncCfg(){
+    var d = { autoPush: true, autoPull: true, localEvery: 60000, cloudEvery: 3600000 };
+    try {
+      var o = JSON.parse(localStorage.getItem("dsh.worktable.sync.v1") || "{}");
+      if (typeof o.autoPush === "boolean") d.autoPush = o.autoPush;
+      if (typeof o.autoPull === "boolean") d.autoPull = o.autoPull;
+      if (+o.localEvery > 0) d.localEvery = (+o.localEvery) * 1000;
+      if (+o.cloudEvery > 0) d.cloudEvery = (+o.cloudEvery) * 1000;
+    } catch(e){}
+    return d;
+  }
 
-  /* 云端：1 小时才读一次（读的时候做「只增不减」的差异合并） */
-  setInterval(function(){ syncCloud(false); }, SYNC_INTERVAL);
+  var _localTimer = null, _cloudTimer = null;
+
+  function rebuildSyncTimers(){
+    var cf = syncCfg();
+    if (_localTimer) { clearInterval(_localTimer); _localTimer = null; }
+    if (_cloudTimer) { clearInterval(_cloudTimer); _cloudTimer = null; }
+    if (!cf.autoPull) return;    /* 关掉定时拉取就什么都不排 */
+
+    _localTimer = setInterval(function(){
+      if (!syncCfg().autoPull) return;
+      try { syncLocalOnly(); } catch(e){}
+    }, cf.localEvery);
+
+    _cloudTimer = setInterval(function(){
+      if (!syncCfg().autoPull) return;
+      /* 云端慢，就做一次完整比对（拉 + 合并），不是单纯推 */
+      try { pullBoth(); } catch(e){}
+    }, cf.cloudEvery);
+  }
+
+  rebuildSyncTimers();
+
+  /* 主窗口改了设置 → 这里立刻生效 */
+  window.addEventListener("storage", function(e){
+    if (e.key === "dsh.worktable.sync.v1") rebuildSyncTimers();
+  });
+
+  /* 主窗口点「立即拉取」→ 这里跑一次完整比对合并 */
+  window.addEventListener("storage", function(e){
+    if (e.key !== "dsh.worktable.pullCmd.v1") return;
+    todoHint("收到拉取请求，正在比对…");
+    var p;
+    try { p = pullBoth(); } catch(e){ p = Promise.reject(e); }
+    Promise.resolve(p).then(function(){
+      todoHint("拉取完成", "#2f7a4f");
+    }).catch(function(){
+      todoHint("拉取失败，检查思源连接", "#b4453a");
+    });
+  });
 
   /* 启动后 8 秒做一次完整比对 */
   setTimeout(function(){ autoSync("启动"); }, 30000);

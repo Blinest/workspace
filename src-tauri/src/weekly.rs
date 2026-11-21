@@ -232,7 +232,11 @@ fn render_weekly() -> Result<String, String> {
 fn send(stream: &mut TcpStream, code: u16, ctype: &str, body: &str) {
     let resp = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\
-         Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\n\
+         Cache-Control: no-store\r\n\
+         Access-Control-Allow-Origin: *\r\n\
+         Access-Control-Allow-Methods: GET,POST,OPTIONS\r\n\
+         Access-Control-Allow-Headers: Content-Type\r\n\
+         Access-Control-Max-Age: 600\r\n\
          Connection: close\r\n\r\n{}",
         code,
         if code == 200 { "OK" } else { "Error" },
@@ -276,6 +280,11 @@ fn handle(mut stream: TcpStream) {
     let path = url.split('?').next().unwrap_or("/");
 
     match (method, path) {
+        /* 浏览器的 CORS 预检。POST + JSON 一定会先发 OPTIONS，
+           不回这个请求的话前端只会看到 "Failed to fetch"。 */
+        ("OPTIONS", _) => {
+            send_json(&mut stream, 200, "{\"ok\":true}");
+        }
         ("GET", "/health") => {
             let body = format!("{{\"ok\":true,\"pid\":{}}}", std::process::id());
             send_json(&mut stream, 200, &body);

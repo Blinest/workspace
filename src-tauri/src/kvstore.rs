@@ -194,11 +194,22 @@ pub fn kv_info() -> Result<serde_json::Value, String> {
         .map(|m| m.len())
         .unwrap_or(0);
 
+    let dir = DB_PATH
+        .get()
+        .and_then(|p| p.parent())
+        .map(|d| d.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    /* 目录总大小：db + wal + shm + settings.json（不含 backup） */
+    let dir_bytes = dir_bytes(&dir);
+
     Ok(serde_json::json!({
+        "dir": dir,
         "path": path().unwrap_or_default(),
         "keys": count,
         "dataBytes": total,
         "fileBytes": file_bytes,
+        "dirBytes": dir_bytes,
     }))
 }
 
@@ -303,6 +314,28 @@ pub fn sync_settings_from_json() {
     }
 }
 
+
+/// 目录里属于数据库和设置的文件总大小（不含 backup 子目录）。
+fn dir_bytes(dir: &str) -> u64 {
+    let mut total = 0u64;
+    let rd = match std::fs::read_dir(dir) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            continue;   /* 跳过 backup */
+        }
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        if name.starts_with("worktable.db") || name == "settings.json" {
+            if let Ok(m) = std::fs::metadata(&p) {
+                total += m.len();
+            }
+        }
+    }
+    total
+}
 
 /* ================= 备份 ================= */
 
